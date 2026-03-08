@@ -689,8 +689,8 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
 <div id="print-sheet"><div id="print-grid" class="print-sheet"></div></div>
 
 <!-- Firebase SDK — חייב להיות לפני הסקריפט הראשי -->
-<script src="https://unpkg.com/firebase@10.12.2/compat/app.js"></script>
-<script src="https://unpkg.com/firebase@10.12.2/compat/database.js"></script>
+<script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
 <script>
 // ════════════════════════════════════════
@@ -1294,33 +1294,39 @@ function globalSearch(v){if(!v||!DB)return;const b=DB.books.find(x=>x.title.incl
 // ════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════
-function startApp(){
-  if(typeof firebase === 'undefined'){
-    document.getElementById('lib-list').innerHTML =
-      `<div style="color:var(--red);font-size:12px;padding:14px;line-height:1.8">
-        ⚠️ לא ניתן לטעון את Firebase.<br>
-        <small>ודאי שיש חיבור לאינטרנט ורענני את הדף.</small>
-      </div>`;
-    return;
-  }
+function initFirebase(){
   try {
-    fbApp = firebase.initializeApp(FB_CONFIG);
+    let app;
+    try { app = firebase.app(); }
+    catch(e) { app = firebase.initializeApp(FB_CONFIG); }
+    fbApp = app;
     fbDb  = firebase.database(fbApp);
     fbDb.ref('.info/connected').on('value', snap => setSyncStatus(snap.val()===true));
     initLauncherUI();
     loadLibrariesFromFirebase();
   } catch(e) {
-    // App may already be initialized (hot reload) — get existing instance
-    try {
-      fbApp = firebase.app();
-      fbDb  = firebase.database(fbApp);
-      fbDb.ref('.info/connected').on('value', snap => setSyncStatus(snap.val()===true));
-      initLauncherUI();
-      loadLibrariesFromFirebase();
-    } catch(e2) {
-      document.getElementById('lib-list').innerHTML =
-        `<div style="color:var(--red);font-size:12px;padding:14px">שגיאה: ${e2.message}</div>`;
-    }
+    document.getElementById('lib-list').innerHTML =
+      `<div style="color:var(--red);font-size:12px;padding:14px">שגיאה: ${e.message}</div>`;
+    console.error('Firebase init error:', e);
+  }
+}
+
+function startApp(){
+  if(typeof firebase !== 'undefined'){
+    initFirebase();
+  } else {
+    // CDN slow — retry after 2 seconds
+    setTimeout(()=>{
+      if(typeof firebase !== 'undefined'){
+        initFirebase();
+      } else {
+        document.getElementById('lib-list').innerHTML =
+          `<div style="color:var(--red);font-size:12px;padding:14px;line-height:1.9">
+            ⚠️ לא ניתן לטעון את Firebase.<br>ודאי שיש חיבור לאינטרנט.<br>
+            <button onclick="location.reload()" style="margin-top:8px;padding:6px 14px;background:#0f2744;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:Heebo,sans-serif;font-size:12px">🔄 נסי שוב</button>
+          </div>`;
+      }
+    }, 2000);
   }
 }
 
