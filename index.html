@@ -6,6 +6,7 @@
 <title>LibraryPro – אורות</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -490,6 +491,8 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
           <div class="filter-chip active" onclick="fStudents('all',this)">הכל</div>
           <div id="cls-filters"></div>
           <input type="text" id="ssearch" placeholder="חיפוש..." oninput="fStudentsText(this.value)" style="padding:4px 9px;border:1.5px solid var(--border);border-radius:20px;font-size:11px;direction:rtl;background:#fff;margin-right:auto;width:170px">
+          <button class="btn btn-sm btn-ghost" onclick="document.getElementById('xl-import').click()" title="ייבוא מאקסל">📥 ייבוא מאקסל</button>
+          <input type="file" id="xl-import" accept=".xlsx,.xls,.csv" style="display:none" onchange="importStudentsExcel(event)">
           <button class="btn btn-sm btn-primary" onclick="openAddStudent()">+ תלמיד</button>
         </div>
         <div class="card"><div class="card-header"><div class="card-title">תלמידים (<span id="students-cnt">0</span>)</div></div>
@@ -666,7 +669,6 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
     <div class="cols2"><div class="field"><label>שם פרטי</label><input type="text" id="ms-first"></div><div class="field"><label>שם משפחה</label><input type="text" id="ms-last"></div></div>
     <div class="cols2"><div class="field"><label>כיתה</label><select id="ms-cls"><option>א1</option><option>א2</option><option>ב1</option><option>ב2</option><option>ג1</option><option>ג2</option><option>ד1</option><option>ד2</option><option>ה1</option><option>ה2</option><option>ו1</option><option>ו2</option><option>ז1</option><option>ז2</option><option>ח1</option><option>ח2</option></select></div>
     <div class="field"><label>מספר כרטיס</label><input type="text" id="ms-card" placeholder="אוטומטי"></div></div>
-    <div class="field"><label>טלפון הורה</label><input type="tel" id="ms-phone" dir="ltr"></div>
   </div>
   <div class="modal-footer"><button class="btn btn-ghost btn-sm" onclick="closeModal('modal-student')">ביטול</button><button class="btn btn-primary btn-sm" onclick="saveStudent()">שמור</button></div></div>
 </div>
@@ -1125,14 +1127,92 @@ function renderStudents(){
 }
 function fStudents(f,el){sFilter=f;document.querySelectorAll('#view-students .filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderStudents();}
 function fStudentsText(v){sText=v;renderStudents();}
-function openAddStudent(){editingStudentId=null;['ms-first','ms-last','ms-phone'].forEach(id=>document.getElementById(id).value='');document.getElementById('ms-card').value='(אוטומטי)';document.getElementById('ms-title-h').textContent='👤 הוסף תלמיד';openModal('modal-student');}
-function editStudent(id){const s=DB.students.find(x=>x.id===id);if(!s)return;editingStudentId=id;document.getElementById('ms-title-h').textContent='✏️ עריכה';document.getElementById('ms-first').value=s.first;document.getElementById('ms-last').value=s.last;document.getElementById('ms-cls').value=s.cls;document.getElementById('ms-card').value=s.card;document.getElementById('ms-phone').value=s.phone||'';openModal('modal-student');}
+function openAddStudent(){editingStudentId=null;['ms-first','ms-last'].forEach(id=>document.getElementById(id).value='');document.getElementById('ms-card').value='';document.getElementById('ms-title-h').textContent='👤 הוסף תלמיד';openModal('modal-student');}
+function editStudent(id){const s=DB.students.find(x=>x.id===id);if(!s)return;editingStudentId=id;document.getElementById('ms-title-h').textContent='✏️ עריכה';document.getElementById('ms-first').value=s.first;document.getElementById('ms-last').value=s.last;document.getElementById('ms-cls').value=s.cls;document.getElementById('ms-card').value=s.card;openModal('modal-student');}
 function saveStudent(){
   const first=document.getElementById('ms-first').value.trim(),last=document.getElementById('ms-last').value.trim();if(!first||!last){alert('נא למלא שם מלא');return;}
-  if(editingStudentId){const s=DB.students.find(x=>x.id===editingStudentId);s.first=first;s.last=last;s.cls=document.getElementById('ms-cls').value;s.phone=document.getElementById('ms-phone').value.trim();}
-  else{DB._ids.student++;DB.students.push({id:DB._ids.student,first,last,cls:document.getElementById('ms-cls').value,card:'S'+DB._ids.student,phone:document.getElementById('ms-phone').value.trim(),debt:0});addAct(`תלמיד חדש: ${first} ${last}`,'#27ae60');}
+  if(editingStudentId){const s=DB.students.find(x=>x.id===editingStudentId);s.first=first;s.last=last;s.cls=document.getElementById('ms-cls').value;}
+  else{DB._ids.student++;DB.students.push({id:DB._ids.student,first,last,cls:document.getElementById('ms-cls').value,card:'S'+DB._ids.student,debt:0});addAct(`תלמיד חדש: ${first} ${last}`,'#27ae60');}
   saveDB();closeModal('modal-student');
 }
+function importStudentsExcel(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  event.target.value = ''; // reset so same file can be re-imported
+
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+
+      if(!rows.length){ alert('הקובץ ריק או לא נקרא כהלכה'); return; }
+
+      // Normalize column names (support Hebrew + English variants)
+      const norm = s => String(s||'').trim().toLowerCase()
+        .replace(/\s+/g,'').replace(/['"]/g,'');
+
+      const COL_FIRST  = ['שםפרטי','first','firstname','שם_פרטי','פרטי'];
+      const COL_LAST   = ['שםמשפחה','last','lastname','שם_משפחה','משפחה'];
+      const COL_CLASS  = ['כיתה','class','grade','כתה'];
+      const COL_CARD   = ['כרטיס','card','מספרכרטיס','id'];
+
+      const findCol = (keys, row) => {
+        const rowKeys = Object.keys(row);
+        for(const rk of rowKeys){
+          if(keys.includes(norm(rk))) return rk;
+        }
+        return null;
+      };
+
+      const firstRow = rows[0];
+      const cFirst = findCol(COL_FIRST, firstRow);
+      const cLast  = findCol(COL_LAST,  firstRow);
+      const cClass = findCol(COL_CLASS, firstRow);
+      const cCard  = findCol(COL_CARD,  firstRow);
+
+      if(!cFirst || !cLast){
+        alert('לא נמצאו עמודות שם פרטי / שם משפחה.\n\nוודאי שהקובץ כולל עמודות בשם:\nשם פרטי | שם משפחה | כיתה');
+        return;
+      }
+
+      let added=0, skipped=0;
+      rows.forEach(row => {
+        const first = String(row[cFirst]||'').trim();
+        const last  = String(row[cLast] ||'').trim();
+        if(!first || !last){ skipped++; return; }
+
+        // Skip duplicates (same first+last+class)
+        const cls = cClass ? String(row[cClass]||'').trim() : '';
+        const exists = DB.students.find(s =>
+          s.first===first && s.last===last && (!cls || s.cls===cls));
+        if(exists){ skipped++; return; }
+
+        DB._ids.student++;
+        const card = cCard && row[cCard] ? String(row[cCard]).trim() : 'S'+DB._ids.student;
+        DB.students.push({id:DB._ids.student, first, last,
+          cls: cls || 'א1', card, debt:0});
+        added++;
+      });
+
+      if(added > 0){
+        addAct(`יובאו ${added} תלמידים מאקסל`, '#1a7a6e');
+        saveDB();
+      }
+
+      const msg = added > 0
+        ? `✅ יובאו ${added} תלמידים בהצלחה${skipped>0 ? `\n(${skipped} שורות דולגו — כפילויות / ריקות)` : ''}`
+        : `לא נוספו תלמידים חדשים (${skipped} כפילויות / שורות ריקות)`;
+      alert(msg);
+    } catch(err){
+      alert('שגיאה בקריאת הקובץ: ' + err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 function delStudent(id){if(!confirm('מחק תלמיד?'))return;DB.students=DB.students.filter(s=>s.id!==id);saveDB();}
 function showStudentDetail(id){
   const s=DB.students.find(x=>x.id===id);if(!s)return;
