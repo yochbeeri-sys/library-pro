@@ -812,30 +812,75 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
         </div>
       </div>
       <div id="mb-step3" style="display:none">
+
+        <!-- ── Auto-fill bar ── -->
+        <div id="mb-autofill-bar" style="display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,#eef2ff,#f5f0ff);border:1.5px solid #c7d2fe;border-radius:9px;padding:9px 13px;margin-bottom:13px">
+          <span style="font-size:16px">🌐</span>
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:700;color:#3730a3">השלמת פרטים אוטומטית</div>
+            <div style="font-size:10px;color:#6366f1">הכנס שם ספר ולחץ — המערכת תחפש ותמלא מחבר, נושא, שנה, סדרה ועוד</div>
+          </div>
+          <button id="mb-autofill-btn" class="btn btn-sm" onclick="mbAutoFill()"
+            style="background:#4f46e5;color:#fff;font-size:12px;white-space:nowrap;flex-shrink:0">
+            ✨ השלם פרטים
+          </button>
+        </div>
+        <div id="mb-autofill-status" style="display:none;font-size:11px;padding:7px 11px;border-radius:6px;margin-bottom:10px"></div>
+
         <div style="display:grid;grid-template-columns:1fr 130px;gap:14px;margin-bottom:12px">
           <div>
-            <div class="field"><label>שם הספר</label><input type="text" id="mb-f-title" placeholder="כותרת"></div>
-            <div class="field"><label>מחבר</label><input type="text" id="mb-f-author"></div>
-            <div class="cols2"><div class="field"><label>ברקוד בסיסי</label><div style="display:flex;gap:5px"><input type="text" id="mb-f-bc" style="flex:1"><button class="btn btn-teal btn-sm" onclick="openScan('mb-f-bc')" style="padding:6px 8px;font-size:13px">📷</button></div></div>
-            <div class="field"><label>עותקים</label><input type="number" id="mb-f-copies" value="1" min="1" max="50"></div></div>
-            <div class="cols2"><div class="field"><label>קטע</label><input type="text" id="mb-f-sec" placeholder="א" maxlength="4"></div><div class="field"><label>מדף</label><input type="text" id="mb-f-shelf" placeholder="001"></div></div>
+            <div class="field">
+              <label>שם הספר</label>
+              <input type="text" id="mb-f-title" placeholder="כותרת" oninput="mbOnTitleChange()">
+            </div>
+            <div class="field">
+              <label>מחבר</label>
+              <input type="text" id="mb-f-author" oninput="mbAutoLocation()">
+            </div>
+            <div class="cols2">
+              <div class="field"><label>ברקוד בסיסי</label><div style="display:flex;gap:5px"><input type="text" id="mb-f-bc" style="flex:1"><button class="btn btn-teal btn-sm" onclick="openScan('mb-f-bc')" style="padding:6px 8px;font-size:13px">📷</button></div></div>
+              <div class="field"><label>עותקים</label><input type="number" id="mb-f-copies" value="1" min="1" max="50"></div>
+            </div>
+            <div class="cols2">
+              <div class="field">
+                <label style="display:flex;align-items:center;gap:5px">
+                  קטע
+                  <span id="mb-sec-auto-badge" style="display:none;font-size:9px;font-weight:700;background:#e8f9ef;color:var(--green);padding:1px 5px;border-radius:8px">אוטו׳</span>
+                </label>
+                <input type="text" id="mb-f-sec" placeholder="ג-ד" maxlength="6"
+                  oninput="mbLocationManual=true;document.getElementById('mb-sec-auto-badge').style.display='none'">
+              </div>
+              <div class="field">
+                <label style="display:flex;align-items:center;gap:5px">
+                  מדף
+                  <span id="mb-shelf-auto-badge" style="display:none;font-size:9px;font-weight:700;background:#e8f9ef;color:var(--green);padding:1px 5px;border-radius:8px">אוטו׳</span>
+                </label>
+                <input type="text" id="mb-f-shelf" placeholder="כה-מ"
+                  oninput="mbLocationManual=true;document.getElementById('mb-shelf-auto-badge').style.display='none'">
+              </div>
+            </div>
           </div>
-          <div><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:5px">כריכה</div>
+          <div>
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:5px">כריכה</div>
             <div id="mb-cover-prev" style="width:130px;height:175px;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;background:#f0ede6;display:flex;align-items:center;justify-content:center;font-size:36px">📚</div>
           </div>
         </div>
+
         <div class="field"><label>קבוצת גיל / תחום</label><div class="group-grid" id="mb-grp-grid"></div></div>
         <div class="cols2">
           <div class="field"><label>נושא</label><input type="text" id="mb-f-subject" placeholder="לדוגמה: הרפתקאות, מדע בדיוני…"></div>
-          <div class="field"><label>תגיות <span style="font-weight:400;color:var(--muted)">(הפרד בפסיק)</span></label>
+          <div class="field">
+            <label>תגיות <span style="font-weight:400;color:var(--muted)">(הפרד בפסיק)</span></label>
             <input type="text" id="mb-f-tags" placeholder="לדוגמה: חברות, גבורה, מלחמה…">
           </div>
         </div>
         <div class="cols2">
-          <div class="field"><label>שם סדרה <span style="font-weight:400;color:var(--muted)">(אופציונלי)</span></label>
+          <div class="field">
+            <label>שם סדרה <span style="font-weight:400;color:var(--muted)">(אופציונלי)</span></label>
             <input type="text" id="mb-f-series" placeholder="לדוגמה: הארי פוטר, ארניה…">
           </div>
-          <div class="field"><label>מספר בסדרה</label>
+          <div class="field">
+            <label>מספר בסדרה</label>
             <input type="number" id="mb-f-series-num" placeholder="1" min="1" max="999">
           </div>
         </div>
@@ -1415,6 +1460,7 @@ function fBooksText(v){bText=v;renderBooks();}
 let editingBookId=null, selectedISBN=null, coverB64=null, mbGrp=GROUPS[0];
 function openAddBookModal(){
   editingBookId=null;selectedISBN=null;coverB64=null;
+  mbLocationManual=false;
   document.getElementById('mb-title-h').textContent='➕ הוסף ספר';
   document.getElementById('mb-isbn').value='';document.getElementById('mb-query').value='';
   document.getElementById('isbn-results').innerHTML='';document.getElementById('isbn-none').style.display='none';document.getElementById('isbn-loading').style.display='none';
@@ -1425,11 +1471,16 @@ function openAddBookModal(){
   document.getElementById('mb-cover-prev').innerHTML='📚';
   document.getElementById('mb-cover-prev').style.cssText='width:130px;height:175px;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;background:#f0ede6;display:flex;align-items:center;justify-content:center;font-size:36px';
   setStep(1);initGroupGrid('mb-grp-grid',GROUPS[0]);mbGrp=GROUPS[0];
+  const s=document.getElementById('mb-autofill-status');if(s)s.style.display='none';
+  const sb=document.getElementById('mb-sec-auto-badge');if(sb)sb.style.display='none';
+  const shb=document.getElementById('mb-shelf-auto-badge');if(shb)shb.style.display='none';
   openModal('modal-book');
 }
 function editBook(id){
   const b=DB.books.find(x=>x.id===id);if(!b)return;
-  editingBookId=id;document.getElementById('mb-title-h').textContent='✏️ עריכה';
+  editingBookId=id;
+  mbLocationManual=true; // editing existing — treat location as manual
+  document.getElementById('mb-title-h').textContent='✏️ עריכה';
   setStep(2);
   document.getElementById('mb-f-title').value=b.title;
   document.getElementById('mb-f-author').value=b.author;
@@ -1519,6 +1570,8 @@ function goManual(){
   document.getElementById('mb-f-series-num').value='';
   document.getElementById('mb-cover-prev').innerHTML='📚';
   document.getElementById('mb-cover-prev').style.cssText='width:130px;height:175px;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;background:#f0ede6;display:flex;align-items:center;justify-content:center;font-size:36px';
+  mbLocationManual=false;
+  const s=document.getElementById('mb-autofill-status');if(s)s.style.display='none';
   setStep(2);
 }
 function renderISBN(books){
@@ -1541,7 +1594,10 @@ function selISBN(i){
   document.getElementById('mb-f-author').value=selectedISBN.author||'';
   if(selectedISBN.isbn)document.getElementById('mb-f-bc').value=selectedISBN.isbn.replace(/^978/,'').substring(0,7);
   if(selectedISBN.cover){const p=document.getElementById('mb-cover-prev');p.innerHTML='';p.style.cssText='';const img=document.createElement('img');img.src=selectedISBN.cover;img.style.cssText='width:130px;height:175px;object-fit:cover;border-radius:7px';p.appendChild(img);}
+  mbLocationManual=false;
   setStep(2);
+  // Trigger auto-location now that author is filled
+  setTimeout(mbAutoLocation,50);
 }
 function loadCoverPhoto(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{coverB64=ev.target.result;document.getElementById('cover-up-disp').innerHTML=`<img src="${coverB64}" style="max-height:55px;max-width:100%;display:block;margin:0 auto 2px"><div style="font-size:9px;color:var(--muted)">לחץ להחלפה</div>`;const p=document.getElementById('mb-cover-prev');p.innerHTML='';p.style.cssText='';const img=document.createElement('img');img.src=coverB64;img.style.cssText='width:130px;height:175px;object-fit:cover;border-radius:7px';p.appendChild(img);};r.readAsDataURL(f);}
 function saveBook(){
@@ -2279,7 +2335,174 @@ function resetLibData(){DB={books:[],students:[],loans:[],reservations:[],actLog
 //  GROUP GRID
 // ════════════════════════════════════════
 function initGroupGrid(cid,sel){const g=document.getElementById(cid);if(!g)return;g.innerHTML=GROUPS.map(gr=>`<div class="gchip${gr.id===sel.id?' sel':''}" data-gid="${gr.id}" style="background:${gr.lt};color:${gr.col};border-color:${gr.col}" onclick="selGrp('${cid}','${gr.id}')">${gr.lbl}</div>`).join('');if(cid==='lbl-grp-grid')labelSelGroup=sel;if(cid==='mb-grp-grid')mbGrp=sel;}
-function selGrp(cid,id){const grp=GROUPS.find(g=>g.id===id);document.querySelectorAll(`#${cid} .gchip`).forEach(c=>c.classList.remove('sel'));document.querySelector(`#${cid} [data-gid="${id}"]`)?.classList.add('sel');if(cid==='lbl-grp-grid'){labelSelGroup=grp;upLP();}if(cid==='mb-grp-grid')mbGrp=grp;}
+function selGrp(cid,id){
+  const grp=GROUPS.find(g=>g.id===id);
+  document.querySelectorAll(`#${cid} .gchip`).forEach(c=>c.classList.remove('sel'));
+  document.querySelector(`#${cid} [data-gid="${id}"]`)?.classList.add('sel');
+  if(cid==='lbl-grp-grid'){labelSelGroup=grp;upLP();}
+  if(cid==='mb-grp-grid'){mbGrp=grp;mbAutoLocation();}
+}
+
+// ════════════════════════════════════════
+//  AUTO-LOCATION (מיקום אוטומטי)
+// ════════════════════════════════════════
+let mbLocationManual=false;
+
+function mbOnTitleChange(){
+  // Reset the autofill status hint when title changes
+  const s=document.getElementById('mb-autofill-status');
+  if(s)s.style.display='none';
+}
+
+function mbGroupToSection(grp){
+  if(!grp||!grp.lbl)return '';
+  // Strip common prefixes
+  let lbl=grp.lbl.replace(/^כיתות?\s*/,'').replace(/^שכבת?\s*/,'');
+  // Return up to 4 chars
+  return lbl.substring(0,4).trim();
+}
+
+function mbAuthorToShelf(author){
+  if(!author||!author.trim())return '';
+  const words=author.trim().split(/\s+/);
+  // Use last word (family name convention in Hebrew)
+  const name=words.length>1?words[words.length-1]:words[0];
+  // Keep only Hebrew letters
+  const heb=name.replace(/[^\u05D0-\u05EA]/g,'');
+  return heb.substring(0,3)||name.substring(0,3);
+}
+
+function mbAutoLocation(){
+  if(mbLocationManual)return;
+  const author=document.getElementById('mb-f-author')?.value||'';
+  const section=mbGroupToSection(mbGrp);
+  const shelf=mbAuthorToShelf(author);
+  const secEl=document.getElementById('mb-f-sec');
+  const shelfEl=document.getElementById('mb-f-shelf');
+  const secBadge=document.getElementById('mb-sec-auto-badge');
+  const shelfBadge=document.getElementById('mb-shelf-auto-badge');
+  if(secEl&&section){secEl.value=section;if(secBadge)secBadge.style.display='';}
+  if(shelfEl&&shelf){shelfEl.value=shelf;if(shelfBadge)shelfBadge.style.display='';}
+}
+
+// ════════════════════════════════════════
+//  AUTO-FILL FROM INTERNET (Claude API)
+// ════════════════════════════════════════
+async function mbAutoFill(){
+  const title=document.getElementById('mb-f-title').value.trim();
+  if(!title){
+    mbShowFillStatus('warning','הכנס שם ספר תחילה');return;
+  }
+  const author=document.getElementById('mb-f-author').value.trim();
+  const btn=document.getElementById('mb-autofill-btn');
+  btn.disabled=true;btn.textContent='⏳ מחפש...';
+  mbShowFillStatus('info','🔍 מחפש פרטים עבור "'+title+'"...');
+
+  // Build the groups list for the prompt
+  const groupsList=GROUPS.map(g=>g.lbl).join(', ');
+
+  const prompt=`אתה מומחה ספריות ישראלי. עליך לחפש פרטים על הספר הבא ולהחזיר JSON בלבד.
+
+שם הספר: "${title}"${author?'\nמחבר/ת ידוע/ה: "'+author+'"':''}
+
+קבוצות גיל זמינות במערכת: ${groupsList}
+
+החזר JSON תקני בפורמט הזה בדיוק (ללא markdown, ללא הסברים, JSON בלבד):
+{
+  "author": "שם המחבר המלא בעברית",
+  "year": "שנת הוצאה לאור (4 ספרות)",
+  "subject": "נושא/ז'אנר קצר",
+  "tags": ["תגית1","תגית2","תגית3"],
+  "series": "שם הסדרה אם קיימת, אחרת ריק",
+  "seriesNum": 0,
+  "ageGroup": "קבוצת הגיל המתאימה ביותר מהרשימה שנתתי",
+  "confidence": "high/medium/low"
+}
+
+חוקים:
+- אם אינך בטוח בפרט מסוים — השאר מחרוזת ריקה "" (אל תמציא!)
+- seriesNum: מספר בסדרה אם ידוע, 0 אם לא
+- ageGroup: חייב להיות אחד מהערכים ברשימה שנתתי בדיוק
+- tags: עד 5 תגיות קצרות בעברית`;
+
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:600,
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    if(!resp.ok){throw new Error('API error '+resp.status);}
+    const data=await resp.json();
+    const raw=data.content?.find(b=>b.type==='text')?.text||'';
+    // Strip any accidental markdown fences
+    const jsonStr=raw.replace(/```json|```/g,'').trim();
+    const info=JSON.parse(jsonStr);
+
+    // Apply fields — only fill empty ones (don't overwrite user edits)
+    let filled=[];
+
+    if(info.author&&!document.getElementById('mb-f-author').value.trim()){
+      document.getElementById('mb-f-author').value=info.author;filled.push('מחבר');
+      mbAutoLocation(); // recalc shelf from newly-filled author
+    }
+    if(info.year&&!document.getElementById('mb-f-subject').value.trim()&&info.subject){
+      document.getElementById('mb-f-subject').value=info.subject;filled.push('נושא');
+    } else if(info.subject&&!document.getElementById('mb-f-subject').value.trim()){
+      document.getElementById('mb-f-subject').value=info.subject;filled.push('נושא');
+    }
+    if(info.year&&!document.getElementById('mb-f-tags').value.trim()&&info.tags?.length){
+      document.getElementById('mb-f-tags').value=info.tags.join(', ');filled.push('תגיות');
+    }
+    if(info.series&&!document.getElementById('mb-f-series').value.trim()){
+      document.getElementById('mb-f-series').value=info.series;filled.push('סדרה');
+    }
+    if(info.seriesNum&&info.seriesNum>0&&!document.getElementById('mb-f-series-num').value){
+      document.getElementById('mb-f-series-num').value=info.seriesNum;filled.push('מספר בסדרה');
+    }
+    // Age group — find and select it
+    if(info.ageGroup){
+      const grp=GROUPS.find(g=>g.lbl===info.ageGroup||info.ageGroup.includes(g.lbl)||g.lbl.includes(info.ageGroup));
+      if(grp&&mbGrp?.id===GROUPS[0].id){
+        initGroupGrid('mb-grp-grid',grp);mbGrp=grp;
+        mbAutoLocation();filled.push('קבוצת גיל');
+      }
+    }
+    // Tags — only if empty
+    if(info.tags?.length&&!document.getElementById('mb-f-tags').value.trim()){
+      document.getElementById('mb-f-tags').value=info.tags.join(', ');
+      if(!filled.includes('תגיות'))filled.push('תגיות');
+    }
+
+    const conf=info.confidence==='low'?' (וודאות נמוכה — בדוק ידנית)':info.confidence==='medium'?' (בדוק ידנית)':'';
+    if(filled.length){
+      mbShowFillStatus('success',`✅ הושלמו: ${filled.join(', ')}${conf}`);
+    }else{
+      mbShowFillStatus('warning','ℹ️ כל הפרטים כבר מלאים — לא היה מה להשלים'+conf);
+    }
+  }catch(e){
+    mbShowFillStatus('error','⚠️ לא ניתן היה להשלים פרטים אוטומטית. נסה ידנית.');
+    console.error('AutoFill error:',e);
+  }finally{
+    btn.disabled=false;btn.textContent='✨ השלם פרטים';
+  }
+}
+
+function mbShowFillStatus(type,msg){
+  const el=document.getElementById('mb-autofill-status');
+  if(!el)return;
+  const styles={
+    success:'background:#e8f9ef;color:#1a6e3a;border:1px solid #a8e0be',
+    warning:'background:#fef0e4;color:#8a3a00;border:1px solid #f0c090',
+    error:'background:#fbe6e6;color:#7a1a1a;border:1px solid #e0a8a8',
+    info:'background:#e6f3fb;color:#1a4a7a;border:1px solid #a8d8f0',
+  };
+  el.style.cssText=`display:block;font-size:11px;padding:7px 11px;border-radius:6px;margin-bottom:10px;${styles[type]||styles.info}`;
+  el.textContent=msg;
+}
 
 // ════════════════════════════════════════
 //  SCANNER
