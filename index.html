@@ -561,9 +561,13 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
           <input type="text" id="bsearch" placeholder="חיפוש..." oninput="fBooksText(this.value)" style="padding:4px 9px;border:1.5px solid var(--border);border-radius:20px;font-size:11px;direction:rtl;background:#fff;margin-right:auto;width:170px">
           <button class="btn btn-sm btn-primary" onclick="openAddBookModal()">+ ספר</button>
         </div>
-        <div class="card"><div class="card-header"><div class="card-title">קטלוג (<span id="books-cnt">0</span>)</div><button class="btn btn-sm btn-ghost" onclick="exportBooks()">⬇ ייצוא</button></div>
+        <div class="card"><div class="card-header"><div class="card-title">קטלוג (<span id="books-cnt">0</span>)</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-teal" onclick="openBulkImport()">📥 ייבוא מאסיבי</button>
+            <button class="btn btn-sm btn-ghost" onclick="exportBooks()">⬇ ייצוא</button>
+          </div></div>
           <div style="padding:0"><div class="table-wrap"><table>
-            <thead><tr><th>כותרת</th><th>מחבר</th><th>קבוצה</th><th>מיקום</th><th>עותקים</th><th>זמין</th><th></th></tr></thead>
+            <thead><tr><th>כותרת</th><th>מחבר</th><th>סדרה</th><th>קבוצה</th><th>מיקום</th><th>עותקים</th><th>זמין</th><th></th></tr></thead>
             <tbody id="books-tbody"></tbody>
           </table></div></div>
         </div>
@@ -827,6 +831,14 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
             <input type="text" id="mb-f-tags" placeholder="לדוגמה: חברות, גבורה, מלחמה…">
           </div>
         </div>
+        <div class="cols2">
+          <div class="field"><label>שם סדרה <span style="font-weight:400;color:var(--muted)">(אופציונלי)</span></label>
+            <input type="text" id="mb-f-series" placeholder="לדוגמה: הארי פוטר, ארניה…">
+          </div>
+          <div class="field"><label>מספר בסדרה</label>
+            <input type="number" id="mb-f-series-num" placeholder="1" min="1" max="999">
+          </div>
+        </div>
         <div style="display:flex;justify-content:space-between;margin-top:10px">
           <button class="btn btn-ghost btn-sm" onclick="backStep()">← חזרה</button>
           <button class="btn btn-primary" onclick="saveBook()">שמור ✓</button>
@@ -902,6 +914,71 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
       <div class="table-wrap" id="asr-results" style="max-height:340px;overflow-y:auto"></div>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost btn-sm" onclick="closeModal('modal-advsearch')">סגור</button></div>
+  </div>
+</div>
+
+<!-- Bulk Import Modal -->
+<div class="modal-overlay" id="modal-bulk">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>📥 ייבוא ספרים בכמות</h3>
+      <button class="modal-close" onclick="closeModal('modal-bulk')">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Source tabs -->
+      <div style="display:flex;gap:5px;background:var(--bg);border-radius:7px;padding:3px;margin-bottom:16px;width:fit-content">
+        <div class="tab-item active" id="bi-tab-xl" onclick="biTab('xl',this)">📊 קובץ Excel / CSV</div>
+        <div class="tab-item" id="bi-tab-gs" onclick="biTab('gs',this)">🔗 Google Sheets</div>
+      </div>
+
+      <!-- Excel / CSV source -->
+      <div id="bi-src-xl">
+        <div id="bi-drop" style="border:2.5px dashed var(--border);border-radius:10px;padding:24px;text-align:center;cursor:pointer;background:var(--surface2);transition:all .2s"
+             onclick="document.getElementById('bi-file').click()"
+             ondragover="event.preventDefault();this.style.borderColor='var(--blue)';this.style.background='#f0f5ff'"
+             ondragleave="this.style.borderColor='var(--border)';this.style.background='var(--surface2)'"
+             ondrop="biHandleDrop(event)">
+          <div style="font-size:30px;margin-bottom:8px">📊</div>
+          <div style="font-size:13px;font-weight:700;color:var(--navy)">גרור קובץ לכאן, או לחץ לבחירה</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">תומך ב: <strong>.xlsx</strong> / <strong>.xls</strong> / <strong>.csv</strong></div>
+        </div>
+        <input type="file" id="bi-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="biLoadFile(event)">
+      </div>
+
+      <!-- Google Sheets source -->
+      <div id="bi-src-gs" style="display:none">
+        <div style="background:#e8f9ef;border:1px solid #a8e0be;border-radius:8px;padding:11px 13px;font-size:12px;margin-bottom:12px;line-height:1.8">
+          <strong>איך לקבל קישור:</strong><br>
+          1. פתח את הגיליון ב-Google Sheets<br>
+          2. <strong>קובץ → שתף → פרסם באינטרנט</strong><br>
+          3. בחר גיליון → פורמט <strong>CSV</strong> → פרסם<br>
+          4. הדבק את הקישור שהתקבל
+        </div>
+        <div class="field"><label>קישור Google Sheets (CSV)</label>
+          <input type="text" id="bi-gs-url" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" style="direction:ltr;font-size:11px;font-family:'Space Mono',monospace">
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="biLoadGS()">⬇ טען נתונים</button>
+      </div>
+
+      <!-- Column mapping (shown after load) -->
+      <div id="bi-map-section" style="display:none;margin-top:14px">
+        <div style="background:#fef0e4;border:1px solid #f0c090;border-radius:8px;padding:10px 13px;font-size:12px;margin-bottom:12px">
+          ✅ <strong id="bi-rows-found">0 שורות</strong> נטענו — ודא שהעמודות ממופות נכון:
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px" id="bi-col-map"></div>
+        <div id="bi-preview-wrap" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:7px;margin-bottom:12px"></div>
+      </div>
+
+      <!-- Result message -->
+      <div id="bi-result" style="display:none"></div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <div style="font-size:11px;color:var(--muted)" id="bi-footer-note">ספרים כפולים (כותרת זהה) יידלגו אוטומטית</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-bulk')">ביטול</button>
+        <button class="btn btn-primary btn-sm" id="bi-import-btn" style="display:none" onclick="biDoImport()">✅ ייבא לקטלוג</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1320,13 +1397,14 @@ function renderBooks(){
         ${tagsHtml?`<div style="margin-top:2px">${tagsHtml}</div>`:''}
         ${b.cover?`<img src="${b.cover}" style="width:22px;height:30px;object-fit:cover;border-radius:2px;border:1px solid var(--border);margin-top:2px" onerror="this.style.display='none'">`:''}</td>
       <td style="font-size:11px">${esc(b.author)}</td>
+      <td style="font-size:11px">${b.series?`<span style="color:var(--purple);font-weight:600">${esc(b.series)}</span>${b.seriesNum?`<span style="color:var(--muted);font-size:10px"> #${b.seriesNum}</span>`:''}`:''}</td>
       <td><span class="badge" style="background:${b.group?.lt};color:${b.group?.col}">${esc(b.group?.lbl)}</span></td>
       <td style="font-family:'Space Mono',monospace;font-size:10px">${esc(b.section)}-${esc(b.shelf)}</td>
       <td style="text-align:center;font-size:11px">${b.copies.length}</td>
       <td><span class="badge ${av>0?'badge-green':'badge-red'}">${av}/${b.copies.length}</span></td>
       <td><div class="td-act"><button class="btn btn-xs btn-ghost" onclick="editBook(${b.id})">✏️</button><button class="btn btn-xs" style="background:var(--teal);color:#fff" onclick="goLabels(${b.id})">🏷</button><button class="btn btn-xs btn-danger" onclick="delBook(${b.id})">🗑</button></div></td>
     </tr>`;
-  }).join('')||`<tr><td colspan="7"><div class="empty-state"><div class="eicon">📚</div><h3>אין ספרים</h3></div></td></tr>`;
+  }).join('')||`<tr><td colspan="8"><div class="empty-state"><div class="eicon">📚</div><h3>אין ספרים</h3></div></td></tr>`;
 }
 function fBooks(f,el){bFilter=f;document.querySelectorAll('#view-books .filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderBooks();}
 function fBooksText(v){bText=v;renderBooks();}
@@ -1341,8 +1419,9 @@ function openAddBookModal(){
   document.getElementById('mb-isbn').value='';document.getElementById('mb-query').value='';
   document.getElementById('isbn-results').innerHTML='';document.getElementById('isbn-none').style.display='none';document.getElementById('isbn-loading').style.display='none';
   document.getElementById('cover-up-disp').innerHTML='<div style="font-size:22px;margin-bottom:2px">📸</div><div style="font-size:10px;color:var(--muted)">לחץ לצילום / העלאה</div>';
-  ['mb-f-title','mb-f-author','mb-f-bc','mb-f-sec','mb-f-shelf','mb-f-subject','mb-f-tags'].forEach(id=>document.getElementById(id).value='');
+  ['mb-f-title','mb-f-author','mb-f-bc','mb-f-sec','mb-f-shelf','mb-f-subject','mb-f-tags','mb-f-series'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('mb-f-copies').value=1;
+  document.getElementById('mb-f-series-num').value='';
   document.getElementById('mb-cover-prev').innerHTML='📚';
   document.getElementById('mb-cover-prev').style.cssText='width:130px;height:175px;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;background:#f0ede6;display:flex;align-items:center;justify-content:center;font-size:36px';
   setStep(1);initGroupGrid('mb-grp-grid',GROUPS[0]);mbGrp=GROUPS[0];
@@ -1360,6 +1439,8 @@ function editBook(id){
   document.getElementById('mb-f-copies').value=b.copies.length;
   document.getElementById('mb-f-subject').value=b.subject||'';
   document.getElementById('mb-f-tags').value=(b.tags||[]).join(', ');
+  document.getElementById('mb-f-series').value=b.series||'';
+  document.getElementById('mb-f-series-num').value=b.seriesNum||'';
   if(b.cover){const p=document.getElementById('mb-cover-prev');p.innerHTML='';p.style.cssText='';const img=document.createElement('img');img.src=b.cover;img.style.cssText='width:130px;height:175px;object-fit:cover;border-radius:7px';p.appendChild(img);coverB64=b.cover;}
   const grp=GROUPS.find(g=>g.id===b.group?.id)||GROUPS[0];initGroupGrid('mb-grp-grid',grp);mbGrp=grp;
   openModal('modal-book');
@@ -1433,8 +1514,9 @@ function showNone(){
 
 // הכנסה ידנית — דולגת ישירות לשלב 2 עם שדות ריקים
 function goManual(){
-  ['mb-f-title','mb-f-author','mb-f-bc','mb-f-sec','mb-f-shelf','mb-f-subject','mb-f-tags'].forEach(id=>document.getElementById(id).value='');
+  ['mb-f-title','mb-f-author','mb-f-bc','mb-f-sec','mb-f-shelf','mb-f-subject','mb-f-tags','mb-f-series'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('mb-f-copies').value=1;
+  document.getElementById('mb-f-series-num').value='';
   document.getElementById('mb-cover-prev').innerHTML='📚';
   document.getElementById('mb-cover-prev').style.cssText='width:130px;height:175px;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;background:#f0ede6;display:flex;align-items:center;justify-content:center;font-size:36px';
   setStep(2);
@@ -1473,11 +1555,13 @@ function saveBook(){
   const cover=coverB64||selectedISBN?.cover||null;
   const subject=document.getElementById('mb-f-subject').value.trim();
   const tags=document.getElementById('mb-f-tags').value.split(',').map(t=>t.trim()).filter(Boolean);
+  const series=document.getElementById('mb-f-series').value.trim();
+  const seriesNum=parseInt(document.getElementById('mb-f-series-num').value)||null;
   if(editingBookId){
     const b=DB.books.find(x=>x.id===editingBookId);
     b.title=title;b.author=document.getElementById('mb-f-author').value.trim();
     b.barcode=bc;b.section=section;b.shelf=shelf;b.group=grp;
-    b.subject=subject;b.tags=tags;
+    b.subject=subject;b.tags=tags;b.series=series;b.seriesNum=seriesNum;
     if(cover)b.cover=cover;
     while(b.copies.length<nc){const n=b.copies.length+1;b.copies.push({num:n,bc:bc+'-'+n,status:'available'});}
   }else{
@@ -1485,7 +1569,7 @@ function saveBook(){
     const copies=Array.from({length:nc},(_,i)=>({num:i+1,bc:bc+'-'+(i+1),status:'available'}));
     DB.books.push({id:DB._ids.book,title,author:document.getElementById('mb-f-author').value.trim(),
       barcode:bc,section,shelf,group:grp,copies,loanCount:0,cover,
-      subject,tags,year:selectedISBN?.year||''});
+      subject,tags,year:selectedISBN?.year||'',series,seriesNum});
     addAct(`ספר חדש: "${title}"`,'#2980b9');
   }
   saveDB();closeModal('modal-book');coverB64=null;selectedISBN=null;
@@ -2200,11 +2284,85 @@ function selGrp(cid,id){const grp=GROUPS.find(g=>g.id===id);document.querySelect
 // ════════════════════════════════════════
 //  SCANNER
 // ════════════════════════════════════════
-let scanTarget='',scanRunning=false;
-function openScan(target){scanTarget=target;document.getElementById('scan-modal').classList.add('open');document.getElementById('sc-res').textContent='ממתין...';document.getElementById('sc-res').style.color='var(--muted)';startScan();}
-function startScan(){if(scanRunning)return;Quagga.init({inputStream:{type:'LiveStream',target:document.getElementById('sc-wrap'),constraints:{facingMode:'environment',width:640,height:480}},decoder:{readers:['code_128_reader','ean_reader','ean_8_reader','code_39_reader','upc_reader']},locate:true},err=>{if(err){document.getElementById('sc-res').textContent='שגיאה: '+err.message;return;}scanRunning=true;Quagga.start();});Quagga.onDetected(res=>{const code=res.codeResult.code;document.getElementById('sc-res').textContent='✅ '+code;document.getElementById('sc-res').style.color='var(--green)';const tgts={'loan-s':()=>document.getElementById('loan-s').value=code,'loan-b':()=>document.getElementById('loan-b').value=code,'lf-bc':()=>{document.getElementById('lf-bc').value=code;upLP();},'mb-isbn':()=>{document.getElementById('mb-isbn').value=code;setTimeout(searchISBN,200);},'mb-f-bc':()=>document.getElementById('mb-f-bc').value=code,'global':()=>{const f=findCopy(code);if(f){showView('loans',null);document.getElementById('loan-b').value=code;}else{const s=DB.students.find(x=>x.card===code);if(s)document.getElementById('loan-s').value=s.first+' '+s.last+' ('+s.card+')';}}};if(tgts[scanTarget])tgts[scanTarget]();setTimeout(stopScan,700);});}
-function stopScan(){if(scanRunning){Quagga.stop();scanRunning=false;}document.getElementById('scan-modal').classList.remove('open');}
-function retryScan(){if(scanRunning){Quagga.stop();scanRunning=false;}document.getElementById('sc-res').textContent='ממתין...';document.getElementById('sc-res').style.color='var(--muted)';startScan();}
+let scanTarget='',scanRunning=false,_scanHandler=null;
+function openScan(target){
+  scanTarget=target;
+  document.getElementById('scan-modal').classList.add('open');
+  document.getElementById('sc-res').textContent='ממתין לסריקה...';
+  document.getElementById('sc-res').style.color='var(--muted)';
+  startScan();
+}
+function startScan(){
+  if(scanRunning){Quagga.stop();scanRunning=false;}
+  // Remove any previous handler to prevent listener stacking
+  if(_scanHandler){Quagga.offDetected(_scanHandler);_scanHandler=null;}
+
+  Quagga.init({
+    inputStream:{
+      type:'LiveStream',
+      target:document.getElementById('sc-wrap'),
+      constraints:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}
+    },
+    decoder:{
+      readers:['ean_reader','ean_8_reader','code_128_reader','code_39_reader','upc_reader','upc_e_reader'],
+      multiple:false
+    },
+    locator:{patchSize:'medium',halfSample:true},
+    numOfWorkers:2,
+    frequency:10,
+    locate:true
+  },err=>{
+    if(err){
+      document.getElementById('sc-res').textContent='שגיאה: '+err.message;
+      document.getElementById('sc-res').style.color='var(--red)';
+      return;
+    }
+    scanRunning=true;
+    Quagga.start();
+  });
+
+  // Confidence-filtered handler — prevents false reads
+  _scanHandler = result => {
+    if(!result||!result.codeResult)return;
+    // Require confidence ≥ 0.7 across all boxes
+    const boxes=result.codeResult.decodedCodes;
+    if(boxes&&boxes.length){
+      const avgConf=boxes.filter(b=>b.error!==undefined).reduce((s,b)=>s+(1-b.error),0)/
+                    boxes.filter(b=>b.error!==undefined).length;
+      if(avgConf<0.7)return;
+    }
+    const code=result.codeResult.code;
+    document.getElementById('sc-res').textContent='✅ '+code;
+    document.getElementById('sc-res').style.color='var(--green)';
+
+    const tgts={
+      'loan-s':()=>document.getElementById('loan-s').value=code,
+      'loan-b':()=>document.getElementById('loan-b').value=code,
+      'lf-bc':()=>{document.getElementById('lf-bc').value=code;upLP();},
+      'mb-isbn':()=>{document.getElementById('mb-isbn').value=code;setTimeout(searchISBN,200);},
+      'mb-f-bc':()=>document.getElementById('mb-f-bc').value=code,
+      'global':()=>{
+        const f=findCopy(code);
+        if(f){showView('loans',null);document.getElementById('loan-b').value=code;}
+        else{const s=DB.students.find(x=>x.card===code);if(s)document.getElementById('loan-s').value=s.first+' '+s.last+' ('+s.card+')';}
+      }
+    };
+    if(tgts[scanTarget])tgts[scanTarget]();
+    // Stop after successful read
+    setTimeout(stopScan,500);
+  };
+  Quagga.onDetected(_scanHandler);
+}
+function stopScan(){
+  if(_scanHandler){Quagga.offDetected(_scanHandler);_scanHandler=null;}
+  if(scanRunning){Quagga.stop();scanRunning=false;}
+  document.getElementById('scan-modal').classList.remove('open');
+}
+function retryScan(){
+  document.getElementById('sc-res').textContent='ממתין לסריקה...';
+  document.getElementById('sc-res').style.color='var(--muted)';
+  startScan();
+}
 document.getElementById('scan-modal').addEventListener('click',e=>{if(e.target===document.getElementById('scan-modal'))stopScan();});
 
 // ════════════════════════════════════════
@@ -2527,6 +2685,169 @@ showView = function(name, el){
   _origShowView(name, el);
   if(name === 'notebook') nbRender();
 };
+
+// BULK IMPORT
+let biRawRows=[],biHeaders=[],biColMap={};
+const BI_FIELDS={
+  title:    {label:'שם הספר *',    required:true,  hints:['שם הספר','שם ספר','כותרת','title','book','name']},
+  author:   {label:'מחבר/סופר',   required:false, hints:['מחבר','סופר','author','writer']},
+  group:    {label:'קבוצת גיל',   required:false, hints:['גיל','קבוצה','שכבה','age','group','level']},
+  section:  {label:'קטע',         required:false, hints:['קטע','section','call']},
+  shelf:    {label:'מדף',         required:false, hints:['מדף','shelf','location']},
+  year:     {label:'שנת הוצאה',   required:false, hints:['שנה','שנת','year','published']},
+  copies:   {label:'עותקים',      required:false, hints:['עותקים','copies','qty','כמות']},
+  barcode:  {label:'ברקוד',       required:false, hints:['ברקוד','barcode','isbn','מזהה']},
+  series:   {label:'סדרה',        required:false, hints:['סדרה','series']},
+  seriesNum:{label:'מס בסדרה',    required:false, hints:['מס בסדרה','מספר בסדרה','series num','seriesnum']},
+  subject:  {label:'נושא',        required:false, hints:['נושא','subject','topic']},
+  tags:     {label:'תגיות',       required:false, hints:['תגיות','tags']},
+};
+function openBulkImport(){
+  biRawRows=[];biHeaders=[];biColMap={};
+  document.getElementById('bi-map-section').style.display='none';
+  document.getElementById('bi-result').style.display='none';
+  document.getElementById('bi-import-btn').style.display='none';
+  document.getElementById('bi-file').value='';
+  document.getElementById('bi-gs-url').value='';
+  biTab('xl',document.getElementById('bi-tab-xl'));
+  openModal('modal-bulk');
+}
+function biTab(tab,el){
+  document.querySelectorAll('#modal-bulk .tab-item').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('bi-src-xl').style.display=tab==='xl'?'':'none';
+  document.getElementById('bi-src-gs').style.display=tab==='gs'?'':'none';
+}
+function biHandleDrop(e){
+  e.preventDefault();
+  document.getElementById('bi-drop').style.borderColor='var(--border)';
+  document.getElementById('bi-drop').style.background='var(--surface2)';
+  const f=e.dataTransfer.files[0];if(f)biParseFile(f);
+}
+function biLoadFile(e){const f=e.target.files[0];if(f)biParseFile(f);}
+async function biLoadGS(){
+  const url=document.getElementById('bi-gs-url').value.trim();
+  if(!url){alert('הכנס קישור');return;}
+  let fetchUrl=url.includes('output=')?url:url+(url.includes('?')?'&':'?')+'output=csv';
+  try{
+    const r=await fetch(fetchUrl);
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    biProcessCSV(await r.text());
+  }catch(e){alert('שגיאה בטעינה: '+e.message+'\nודא שהקישור נכון ושהגיליון פורסם ציבורית כ-CSV');}
+}
+function biParseFile(file){
+  const ext=file.name.split('.').pop().toLowerCase();
+  const r=new FileReader();
+  if(ext==='csv'||ext==='txt'){
+    r.onload=ev=>biProcessCSV(ev.target.result);
+    r.readAsText(file,'UTF-8');
+  }else{
+    r.onload=ev=>{
+      try{
+        const wb=XLSX.read(ev.target.result,{type:'binary'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const json=XLSX.utils.sheet_to_json(ws,{defval:''});
+        if(!json.length){alert('הגיליון ריק');return;}
+        biRawRows=json;biHeaders=Object.keys(json[0]);
+        biAutoMap();biShowMapping();
+      }catch(e){alert('שגיאה בקריאת Excel: '+e.message);}
+    };
+    r.readAsBinaryString(file);
+  }
+}
+function biProcessCSV(text){
+  const first=text.split('\n')[0];
+  const delim=first.includes('\t')?'\t':first.includes(';')?';':',';
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(lines.length<2){alert('הקובץ קצר מדי');return;}
+  biHeaders=nbSplitLine(lines[0],delim).map(h=>h.trim());
+  biRawRows=[];
+  for(let i=1;i<lines.length;i++){
+    const vals=nbSplitLine(lines[i],delim);
+    const obj={};
+    biHeaders.forEach((h,idx)=>obj[h]=(vals[idx]||'').trim());
+    if(Object.values(obj).some(v=>v))biRawRows.push(obj);
+  }
+  biAutoMap();biShowMapping();
+}
+function biAutoMap(){
+  biColMap={};
+  for(const [field,def] of Object.entries(BI_FIELDS)){
+    const match=biHeaders.find(h=>def.hints.some(hint=>h.toLowerCase().replace(/[\s\-_]/g,'').includes(hint.toLowerCase().replace(/[\s\-_]/g,''))));
+    if(match)biColMap[field]=match;
+  }
+}
+function biShowMapping(){
+  const n=biRawRows.length;
+  if(!n){alert('לא נמצאו שורות');return;}
+  document.getElementById('bi-rows-found').textContent=n+' שורות';
+  document.getElementById('bi-map-section').style.display='';
+  document.getElementById('bi-result').style.display='none';
+  document.getElementById('bi-import-btn').style.display='';
+  document.getElementById('bi-col-map').innerHTML=Object.entries(BI_FIELDS).map(([field,def])=>
+    `<div class="field" style="margin:0"><label>${def.label}</label>
+     <select id="bimap-${field}" onchange="biRenderPreview()" style="font-size:11px">
+       <option value="">— ללא —</option>
+       ${biHeaders.map(h=>`<option value="${esc(h)}" ${biColMap[field]===h?'selected':''}>${esc(h)}</option>`).join('')}
+     </select></div>`).join('');
+  biRenderPreview();
+}
+function biRenderPreview(){
+  const m={};Object.keys(BI_FIELDS).forEach(f=>{const el=document.getElementById('bimap-'+f);if(el)m[f]=el.value;});
+  const sample=biRawRows.slice(0,4);
+  document.getElementById('bi-preview-wrap').innerHTML=`<table style="width:100%;font-size:11px;border-collapse:collapse">
+    <thead><tr style="background:var(--navy);color:#fff">
+      <th style="padding:6px 10px;text-align:right">שם ספר</th><th style="padding:6px 10px;text-align:right">מחבר</th>
+      <th style="padding:6px 10px;text-align:right">גיל</th><th style="padding:6px 10px;text-align:right">מדף</th><th style="padding:6px 10px;text-align:right">שנה</th>
+    </tr></thead><tbody>${sample.map(r=>`<tr>
+      <td style="padding:5px 10px;border-bottom:1px solid var(--border);font-weight:600">${esc(m.title&&r[m.title]?r[m.title]:'—')}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid var(--border)">${esc(m.author&&r[m.author]?r[m.author]:'—')}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid var(--border)">${esc(m.group&&r[m.group]?r[m.group]:'—')}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid var(--border)">${esc((m.section&&r[m.section]?r[m.section]:'')+' '+(m.shelf&&r[m.shelf]?r[m.shelf]:''))}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid var(--border)">${esc(m.year&&r[m.year]?r[m.year]:'—')}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+function biDoImport(){
+  const m={};Object.keys(BI_FIELDS).forEach(f=>{const el=document.getElementById('bimap-'+f);if(el)m[f]=el.value;});
+  if(!m.title){alert('חובה למפות את עמודת שם הספר');return;}
+  let added=0,skipped=0,errors=[];
+  biRawRows.forEach((row,idx)=>{
+    const title=(m.title?row[m.title]||'':'').trim();
+    if(!title){skipped++;return;}
+    if(DB.books.find(b=>b.title.trim()===title)){skipped++;return;}
+    try{
+      DB._ids.book++;
+      const bcRaw=m.barcode?row[m.barcode]?.trim():'';
+      const bc=bcRaw||String(DB._ids.book).padStart(4,'0');
+      const secRaw=m.section?row[m.section]?.trim():'';
+      const shelfRaw=m.shelf?row[m.shelf]?.trim():'';
+      let section='א',shelf='001';
+      if(secRaw&&shelfRaw){section=secRaw;shelf=shelfRaw;}
+      else if(secRaw){const parts=secRaw.split(/[\-\s]+/);section=parts[0]||'א';shelf=parts[1]||'001';}
+      const nc=Math.min(50,Math.max(1,parseInt(m.copies?row[m.copies]:'')||1));
+      const grp=nbMatchGroup(m.group?row[m.group]?.trim():'')||GROUPS[0];
+      const copies=Array.from({length:nc},(_,i)=>({num:i+1,bc:bc+'-'+(i+1),status:'available'}));
+      const tags=(m.tags&&row[m.tags]?row[m.tags].split(/[,،;]/).map(t=>t.trim()).filter(Boolean):[]);
+      const seriesNum=parseInt(m.seriesNum?row[m.seriesNum]:'')||null;
+      DB.books.push({id:DB._ids.book,title,
+        author:(m.author?row[m.author]?.trim():'')||'',barcode:bc,section,shelf,group:grp,copies,loanCount:0,cover:null,
+        subject:(m.subject?row[m.subject]?.trim():'')||'',tags,year:(m.year?row[m.year]?.trim():'')||'',
+        series:(m.series?row[m.series]?.trim():'')||'',seriesNum});
+      added++;
+    }catch(e){errors.push('שורה '+(idx+2)+': '+e.message);}
+  });
+  addAct('ייבוא מאסיבי: '+added+' ספרים נוספו','#27ae60');
+  saveDB();updateSbStats();
+  document.getElementById('bi-result').style.display='';
+  document.getElementById('bi-result').innerHTML=`<div class="alert alert-success">
+    ✅ <strong>${added} ספרים</strong> נוספו לקטלוג!
+    ${skipped?`<br><span style="font-size:11px">${skipped} דולגו (כפולים / ללא שם)</span>`:''}
+    ${errors.length?`<br><span style="color:var(--red);font-size:10px">${errors.slice(0,3).join('<br>')}</span>`:''}
+  </div>`;
+  document.getElementById('bi-import-btn').style.display='none';
+  document.getElementById('bi-map-section').style.display='none';
+  if(currentView==='books')renderBooks();
+}
 </script>
 </body>
 </html>
