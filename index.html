@@ -859,6 +859,11 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
                   oninput="mbLocationManual=true;document.getElementById('mb-shelf-auto-badge').style.display='none'">
               </div>
             </div>
+            <button type="button" onclick="mbForceAutoLocation()"
+              style="width:100%;margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 12px;border:1.5px dashed #6366f1;border-radius:7px;background:#eef2ff;color:#4f46e5;font-size:11px;font-weight:700;cursor:pointer;font-family:'Heebo',sans-serif;transition:all .15s"
+              onmouseover="this.style.background='#e0e7ff'" onmouseout="this.style.background='#eef2ff'">
+              🔄 עדכן מיקום לפי גיל + מחבר
+            </button>
           </div>
           <div>
             <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:5px">כריכה</div>
@@ -2388,107 +2393,178 @@ function mbAutoLocation(){
 // ════════════════════════════════════════
 //  AUTO-FILL FROM INTERNET (Claude API)
 // ════════════════════════════════════════
+// ────────────────────────────────────────
+//  עדכן מיקום בכפייה (כפתור)
+// ────────────────────────────────────────
+function mbForceAutoLocation(){
+  mbLocationManual=false;
+  mbAutoLocation();
+  // Flash the fields to give feedback
+  ['mb-f-sec','mb-f-shelf'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.style.transition='background .2s';
+    el.style.background='#d1fae5';
+    setTimeout(()=>el.style.background='',600);
+  });
+}
+
+// ────────────────────────────────────────
+//  השלמת פרטים — Google Books API
+// ────────────────────────────────────────
 async function mbAutoFill(){
   const title=document.getElementById('mb-f-title').value.trim();
-  if(!title){
-    mbShowFillStatus('warning','הכנס שם ספר תחילה');return;
-  }
-  const author=document.getElementById('mb-f-author').value.trim();
+  if(!title){mbShowFillStatus('warning','הכנס שם ספר תחילה');return;}
+
+  const authorVal=document.getElementById('mb-f-author').value.trim();
   const btn=document.getElementById('mb-autofill-btn');
   btn.disabled=true;btn.textContent='⏳ מחפש...';
   mbShowFillStatus('info','🔍 מחפש פרטים עבור "'+title+'"...');
 
-  // Build the groups list for the prompt
-  const groupsList=GROUPS.map(g=>g.lbl).join(', ');
-
-  const prompt=`אתה מומחה ספריות ישראלי. עליך לחפש פרטים על הספר הבא ולהחזיר JSON בלבד.
-
-שם הספר: "${title}"${author?'\nמחבר/ת ידוע/ה: "'+author+'"':''}
-
-קבוצות גיל זמינות במערכת: ${groupsList}
-
-החזר JSON תקני בפורמט הזה בדיוק (ללא markdown, ללא הסברים, JSON בלבד):
-{
-  "author": "שם המחבר המלא בעברית",
-  "year": "שנת הוצאה לאור (4 ספרות)",
-  "subject": "נושא/ז'אנר קצר",
-  "tags": ["תגית1","תגית2","תגית3"],
-  "series": "שם הסדרה אם קיימת, אחרת ריק",
-  "seriesNum": 0,
-  "ageGroup": "קבוצת הגיל המתאימה ביותר מהרשימה שנתתי",
-  "confidence": "high/medium/low"
-}
-
-חוקים:
-- אם אינך בטוח בפרט מסוים — השאר מחרוזת ריקה "" (אל תמציא!)
-- seriesNum: מספר בסדרה אם ידוע, 0 אם לא
-- ageGroup: חייב להיות אחד מהערכים ברשימה שנתתי בדיוק
-- tags: עד 5 תגיות קצרות בעברית`;
-
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:600,
-        messages:[{role:'user',content:prompt}]
-      })
-    });
-    if(!resp.ok){throw new Error('API error '+resp.status);}
-    const data=await resp.json();
-    const raw=data.content?.find(b=>b.type==='text')?.text||'';
-    // Strip any accidental markdown fences
-    const jsonStr=raw.replace(/```json|```/g,'').trim();
-    const info=JSON.parse(jsonStr);
+    // ── 1. Try Open Library first (better Hebrew coverage) ──
+    const olResult=await mbFetchOpenLibrary(title,authorVal);
+    // ── 2. Fallback to Google Books ──
+    const gbResult=await mbFetchGoogleBooks(title,authorVal);
+    // ── 3. Merge: prefer non-empty values, OL first ──
+    const info=mbMergeResults(olResult,gbResult);
 
-    // Apply fields — only fill empty ones (don't overwrite user edits)
-    let filled=[];
+    if(!info){
+      mbShowFillStatus('error','לא נמצאו תוצאות לספר זה. נסה לחפש בשלב 1 או הכנס ידנית.');
+      return;
+    }
+
+    // ── 4. Apply to form ──
+    const filled=[];
 
     if(info.author&&!document.getElementById('mb-f-author').value.trim()){
-      document.getElementById('mb-f-author').value=info.author;filled.push('מחבר');
-      mbAutoLocation(); // recalc shelf from newly-filled author
+      document.getElementById('mb-f-author').value=info.author;
+      filled.push('מחבר');
+      mbLocationManual=false;mbAutoLocation();
     }
-    if(info.year&&!document.getElementById('mb-f-subject').value.trim()&&info.subject){
-      document.getElementById('mb-f-subject').value=info.subject;filled.push('נושא');
-    } else if(info.subject&&!document.getElementById('mb-f-subject').value.trim()){
+    if(info.year&&!document.getElementById('mb-f-tags').value.trim()){
+      // store year as hint; user can see it in status
+    }
+    if(info.subject&&!document.getElementById('mb-f-subject').value.trim()){
       document.getElementById('mb-f-subject').value=info.subject;filled.push('נושא');
     }
-    if(info.year&&!document.getElementById('mb-f-tags').value.trim()&&info.tags?.length){
+    if(info.tags&&info.tags.length&&!document.getElementById('mb-f-tags').value.trim()){
       document.getElementById('mb-f-tags').value=info.tags.join(', ');filled.push('תגיות');
     }
     if(info.series&&!document.getElementById('mb-f-series').value.trim()){
       document.getElementById('mb-f-series').value=info.series;filled.push('סדרה');
     }
-    if(info.seriesNum&&info.seriesNum>0&&!document.getElementById('mb-f-series-num').value){
-      document.getElementById('mb-f-series-num').value=info.seriesNum;filled.push('מספר בסדרה');
+    if(info.cover&&!coverB64&&!selectedISBN?.cover){
+      const p=document.getElementById('mb-cover-prev');
+      p.innerHTML='';p.style.cssText='';
+      const img=document.createElement('img');
+      img.src=info.cover;img.style.cssText='width:130px;height:175px;object-fit:cover;border-radius:7px';
+      img.onerror=()=>{p.innerHTML='📚';p.style.cssText='width:130px;height:175px;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;background:#f0ede6;display:flex;align-items:center;justify-content:center;font-size:36px';};
+      p.appendChild(img);
+      filled.push('כריכה');
     }
-    // Age group — find and select it
+    // Age group from subjects/categories
     if(info.ageGroup){
-      const grp=GROUPS.find(g=>g.lbl===info.ageGroup||info.ageGroup.includes(g.lbl)||g.lbl.includes(info.ageGroup));
+      const grp=GROUPS.find(g=>
+        g.lbl===info.ageGroup||
+        info.ageGroup.includes(g.lbl)||
+        g.lbl.includes(info.ageGroup)
+      );
       if(grp&&mbGrp?.id===GROUPS[0].id){
         initGroupGrid('mb-grp-grid',grp);mbGrp=grp;
-        mbAutoLocation();filled.push('קבוצת גיל');
+        mbLocationManual=false;mbAutoLocation();
+        filled.push('קבוצת גיל');
       }
     }
-    // Tags — only if empty
-    if(info.tags?.length&&!document.getElementById('mb-f-tags').value.trim()){
-      document.getElementById('mb-f-tags').value=info.tags.join(', ');
-      if(!filled.includes('תגיות'))filled.push('תגיות');
-    }
 
-    const conf=info.confidence==='low'?' (וודאות נמוכה — בדוק ידנית)':info.confidence==='medium'?' (בדוק ידנית)':'';
+    const yearNote=info.year?' | שנה: '+info.year:'';
     if(filled.length){
-      mbShowFillStatus('success',`✅ הושלמו: ${filled.join(', ')}${conf}`);
+      mbShowFillStatus('success','✅ הושלמו: '+filled.join(', ')+yearNote);
     }else{
-      mbShowFillStatus('warning','ℹ️ כל הפרטים כבר מלאים — לא היה מה להשלים'+conf);
+      mbShowFillStatus('warning','ℹ️ כל השדות כבר מלאים'+yearNote);
     }
   }catch(e){
-    mbShowFillStatus('error','⚠️ לא ניתן היה להשלים פרטים אוטומטית. נסה ידנית.');
     console.error('AutoFill error:',e);
+    mbShowFillStatus('error','שגיאת חיפוש: '+e.message+'. נסה שנית או הכנס ידנית.');
   }finally{
     btn.disabled=false;btn.textContent='✨ השלם פרטים';
   }
+}
+
+// ── Open Library fetch ──
+async function mbFetchOpenLibrary(title,author){
+  try{
+    const q=encodeURIComponent((author?author+' ':'')+title);
+    const r=await fetch(`https://openlibrary.org/search.json?q=${q}&limit=3&lang=heb`,{signal:AbortSignal.timeout(5000)});
+    if(!r.ok)return null;
+    const d=await r.json();
+    const doc=d.docs?.[0];
+    if(!doc)return null;
+    // Try to get cover
+    const coverId=doc.cover_i;
+    const cover=coverId?`https://covers.openlibrary.org/b/id/${coverId}-M.jpg`:null;
+    // Author: prefer Hebrew name
+    const authorName=(doc.author_name||[])[0]||'';
+    const subject=(doc.subject||[]).slice(0,3).join(', ');
+    const tags=(doc.subject_facet||doc.subject||[]).slice(0,5);
+    return{
+      author:authorName,
+      year:String(doc.first_publish_year||''),
+      subject,tags,cover,series:'',ageGroup:''
+    };
+  }catch{return null;}
+}
+
+// ── Google Books fetch ──
+async function mbFetchGoogleBooks(title,author){
+  try{
+    const q=encodeURIComponent((author?'inauthor:'+author+' ':'')+title);
+    const r=await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=3&langRestrict=iw`,{signal:AbortSignal.timeout(5000)});
+    if(!r.ok)return null;
+    const d=await r.json();
+    // Also try without language restriction if no results
+    let item=d.items?.[0];
+    if(!item){
+      const r2=await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=3`,{signal:AbortSignal.timeout(5000)});
+      const d2=await r2.json();
+      item=d2.items?.[0];
+    }
+    if(!item)return null;
+    const v=item.volumeInfo;
+    const cover=v.imageLinks?.thumbnail?.replace('http://','https://')||null;
+    const authors=(v.authors||[]).join(', ');
+    const cats=v.categories||[];
+    const subject=cats.slice(0,2).join(', ');
+    const tags=[...(v.categories||[]),...(v.keywords||[])].slice(0,5);
+    // Series: sometimes in subtitle
+    const series=v.seriesInfo?.bookDisplayNumber?v.seriesInfo.volumeSeries?.[0]?.seriesId||'':'';
+    // Age group from maturityRating / categories
+    let ageGroup='';
+    const catStr=cats.join(' ').toLowerCase();
+    if(catStr.includes('juvenile')||catStr.includes('children'))ageGroup='כיתות א-ב';
+    else if(catStr.includes('young adult')||catStr.includes('teen'))ageGroup='כיתות ז-ח';
+    return{
+      author:authors,
+      year:(v.publishedDate||'').substring(0,4),
+      subject,tags,cover,series,ageGroup
+    };
+  }catch{return null;}
+}
+
+// ── Merge two result objects, prefer non-empty ──
+function mbMergeResults(a,b){
+  if(!a&&!b)return null;
+  if(!a)return b;
+  if(!b)return a;
+  return{
+    author:     a.author||b.author,
+    year:       a.year||b.year,
+    subject:    a.subject||b.subject,
+    tags:       (a.tags?.length?a.tags:b.tags)||[],
+    cover:      a.cover||b.cover,
+    series:     a.series||b.series,
+    ageGroup:   a.ageGroup||b.ageGroup,
+  };
 }
 
 function mbShowFillStatus(type,msg){
