@@ -1971,7 +1971,7 @@ function renderDL(cid, d, copyNum){
       <span class="lbl-hdr-school">${esc(school)}</span>
     </div>
     <div class="lbl-bc-area">
-      <svg id="${bcId}"></svg>
+      <svg class="lbl-bc-svg"></svg>
       <div class="lbl-bc-num">${esc(code)}</div>
     </div>
     <div class="lbl-body">
@@ -1986,12 +1986,14 @@ function renderDL(cid, d, copyNum){
     </div>
   </div>`;
 
+  // Use direct element reference — works whether el is in DOM or detached
   try {
-    JsBarcode('#'+bcId, code, {
+    const svgEl = el.querySelector('.lbl-bc-svg');
+    if(svgEl) JsBarcode(svgEl, code, {
       format:'CODE128', width:1.2, height:22,
       displayValue:false, margin:0, background:'transparent'
     });
-  } catch(e){}
+  } catch(e){ console.warn('Barcode error:', e); }
 }
 
 // ── Spine sticker 70×35mm — color sides, middle third shows sec+shelf ──
