@@ -234,60 +234,53 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
 .cover-upload-area input,.logo-upload-area input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .logo-upload-area{border:2px dashed var(--border);border-radius:7px;padding:10px;text-align:center;cursor:pointer;position:relative;background:var(--surface2)}
 
-/* ═══ LABELS — redesigned to match school format ═══ */
-/* Detail label: 82mm × 44mm */
+/* ═══ LABELS — 70×35mm sticker, 3 cols × 8 rows = 24/A4 ═══ */
 .lbl-detail{
-  width:82mm;height:44mm;background:#fff;
-  border:1px solid #bbb;border-radius:1.5mm;
+  width:70mm;height:35mm;background:#fff;
+  border:1px solid #ccc;
   overflow:hidden;display:flex;flex-direction:column;
   font-family:'Heebo',sans-serif;direction:rtl;
-  box-shadow:0 1px 4px rgba(0,0,0,.13);
+  box-sizing:border-box;
 }
 .lbl-hdr{
-  display:flex;align-items:center;gap:1.5mm;
-  padding:.6mm 2mm;height:5.5mm;flex-shrink:0;color:#fff;
+  display:flex;align-items:center;gap:1mm;
+  padding:.4mm 1.5mm;height:5mm;flex-shrink:0;color:#fff;
 }
-.lbl-hdr-logo{height:4mm;width:auto;object-fit:contain;flex-shrink:0}
-.lbl-hdr-school{font-size:5.5pt;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lbl-bc-area{display:flex;flex-direction:column;align-items:center;padding:.5mm 2mm 0;flex-shrink:0}
-.lbl-bc-area svg{width:76mm!important;height:10mm!important}
-.lbl-bc-num{font-family:'Space Mono',monospace;font-size:6.5pt;font-weight:700;color:#111;letter-spacing:.5px;margin-top:-.5mm}
-.lbl-info{flex:1;padding:.5mm 2.5mm 1mm;display:flex;justify-content:space-between;align-items:flex-end;overflow:hidden}
-.lbl-text{flex:1;overflow:hidden}
-.lbl-title{font-size:7.5pt;font-weight:900;color:#111;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.lbl-author{font-size:6pt;color:#444;margin-top:.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lbl-abbr{font-size:15pt;font-weight:900;color:#111;line-height:1;letter-spacing:-1px;flex-shrink:0;padding-right:1mm}
+.lbl-hdr-logo{height:3.5mm;width:auto;max-width:6mm;object-fit:contain;flex-shrink:0}
+.lbl-hdr-school{font-size:4.5pt;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbl-bc-area{display:flex;flex-direction:column;align-items:center;padding:0 1.5mm;flex-shrink:0;margin-top:.3mm}
+.lbl-bc-area svg{width:64mm!important;height:8mm!important}
+.lbl-bc-num{font-family:'Space Mono',monospace;font-size:5.5pt;font-weight:700;color:#111;letter-spacing:.3px;margin-top:-.3mm;text-align:center}
+.lbl-body{flex:1;display:flex;align-items:stretch;padding:.5mm 1.5mm .5mm;gap:1.5mm;overflow:hidden;min-height:0}
+.lbl-text{flex:1;overflow:hidden;display:flex;flex-direction:column;justify-content:center}
+.lbl-title{font-size:6.5pt;font-weight:900;color:#111;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.lbl-author{font-size:5.5pt;color:#333;margin-top:.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbl-location{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-width:12mm;background:#f5f5f5;border-radius:1mm;padding:.5mm;
+  border:1px solid #ddd;flex-shrink:0;
+}
+.lbl-loc-sec{font-size:11pt;font-weight:900;color:#111;line-height:1;text-align:center}
+.lbl-loc-shelf{font-size:7.5pt;font-weight:700;color:#333;line-height:1;text-align:center;margin-top:.5mm}
 
-/* Spine label: 22mm × 44mm */
-.lbl-spine{
-  width:22mm;height:44mm;
-  border:1px solid #bbb;border-radius:1.5mm;
-  overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  font-family:'Heebo',sans-serif;
-  box-shadow:0 1px 4px rgba(0,0,0,.13);
-  position:relative;
-}
-.lbl-spine-inner{
-  writing-mode:vertical-rl;
-  text-orientation:mixed;
-  transform:rotate(180deg);
-  font-size:15pt;font-weight:900;color:#111;
-  letter-spacing:1mm;line-height:1;
-}
-.lbl-spine-bar{
-  position:absolute;bottom:0;left:0;right:0;height:5mm;
-  display:flex;align-items:center;justify-content:center;
-}
-.lbl-spine-num{font-family:'Space Mono',monospace;font-size:5pt;font-weight:700;color:#fff}
+/* Spine label kept for backward compat but hidden in new layout */
+.lbl-spine{display:none}
 
-/* Print layout */
+/* Print layout — 3 cols × 8 rows, zero margins */
 @media print{
-  @page{size:A4;margin:7mm 8mm}
+  @page{size:A4;margin:0}
   body{background:#fff}
   #launcher,#sidebar,.topbar,.content,.modal-overlay,#scan-modal{display:none!important}
   #print-sheet{display:block!important}
-  .print-row{display:flex;flex-direction:row;gap:2mm;margin-bottom:2mm;align-items:stretch;break-inside:avoid}
-  .lbl-detail,.lbl-spine{box-shadow:none!important}
+  #print-grid{
+    display:grid;
+    grid-template-columns:repeat(3,70mm);
+    grid-auto-rows:35mm;
+    width:210mm;
+    margin:0;padding:0;
+  }
+  .print-row{display:contents}
+  .lbl-detail{border:0.3pt solid #bbb;box-shadow:none!important}
 }
 @media screen{#print-sheet{display:none}}
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
@@ -675,14 +668,13 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
               </div>
             </div>
 
-            <!-- Row preview: detail + detail + spine -->
+            <!-- Label preview: single 70×35mm sticker -->
             <div id="lpv-row">
               <div class="card"><div class="card-body">
-                <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px;text-align:center">שורה אחת = 2 מדבקות כותר + מדבקת שדרה</div>
-                <div style="display:flex;gap:3mm;align-items:flex-start;justify-content:center;direction:rtl;flex-wrap:wrap">
+                <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px;text-align:center">תצוגה מקדימה — מדבקה 70×35 מ"מ</div>
+                <div style="display:flex;gap:6mm;align-items:flex-start;justify-content:center;direction:rtl;flex-wrap:wrap">
                   <div id="lpv-d1"></div>
                   <div id="lpv-d2"></div>
-                  <div id="lpv-s1" style="flex-shrink:0"></div>
                 </div>
               </div></div>
             </div>
@@ -1921,8 +1913,8 @@ function cancelRes(id){const r=DB.reservations.find(x=>x.id===id);if(r)r.status=
 // ════════════════════════════════════════
 let labelBooks=[],labelCopies=1,labelSelGroup=GROUPS[0],bcIdCounter=0;
 function updateLabelDataLists(){const lcatl=document.getElementById('lcatl');if(lcatl)lcatl.innerHTML=DB.books.map(b=>`<option value="${esc(b.title)}">`).join('');}
-function getLD(bid){return{bookId:bid||'PREV',title:document.getElementById('lf-title')?.value||'שם הספר',author:document.getElementById('lf-author')?.value||'מחבר',barcode:document.getElementById('lf-bc')?.value||bid||'0001',section:document.getElementById('lf-sec')?.value||'א',shelf:document.getElementById('lf-shelf')?.value||'001',school:DB.settings.school||'ספרייה',group:labelSelGroup,copies:labelCopies,logo:DB.settings.logo};}
-function upLP(){const d=getLD();renderDL('lpv-d1',d,1);renderDL('lpv-d2',d,1);renderSL('lpv-s1',d,1);upMini();}
+function getLD(bid){return{bookId:bid||'PREV',title:document.getElementById('lf-title')?.value||'שם הספר',author:document.getElementById('lf-author')?.value||'מחבר',barcode:document.getElementById('lf-bc')?.value||bid||'0001',section:document.getElementById('lf-sec')?.value||'',shelf:document.getElementById('lf-shelf')?.value||'',school:DB?.settings?.school||'ספרייה',group:labelSelGroup,copies:labelCopies,logo:DB?.settings?.logo||null};}
+function upLP(){const d=getLD();renderDL('lpv-d1',d,1);renderDL('lpv-d2',d,1);upMini();}
 function chgLC(d){labelCopies=Math.max(1,Math.min(50,labelCopies+d));document.getElementById('lc-val').textContent=labelCopies;}
 function lblTab(tab,el){
   document.querySelectorAll('#view-labels .filter-chip').forEach(c=>c.classList.remove('active'));
@@ -1939,43 +1931,44 @@ function titleAbbr(title){
   return words[0].substring(0,4);
 }
 
-// ── Detail label (matches PDF format) ──────────────────────────────
-// Structure: [logo + school name header] [barcode] [number] [title bold] [author] [abbr]
+// ── Detail label — 70×35mm sticker format ──────────────────────────
 function renderDL(cid, d, copyNum){
   const el = typeof cid==='string' ? document.getElementById(cid) : cid;
   if(!el) return;
-  const bcId   = 'bc_' + cid + '_' + copyNum + '_' + Date.now();
+  const bcId   = 'bc_dl_' + (++bcIdCounter);
   const code   = String(d.barcode || d.bookId || '0000');
-  const abbr   = titleAbbr(d.title);
-  const school = d.school || 'ספריית בית הספר';
+  const school = d.school || DB?.settings?.school || 'ספריית בית הספר';
   const g      = d.group || GROUPS[0];
+  const logo   = d.logo || DB?.settings?.logo || null;
+  // Location: section + shelf
+  const sec    = (d.section||d.sec||'').trim();
+  const shelf  = (d.shelf||'').trim();
 
   el.innerHTML = `
   <div class="lbl-detail" dir="rtl">
-    <!-- Header: logo + school name -->
     <div class="lbl-hdr" style="background:${esc(g.col)}">
-      ${d.logo ? `<img src="${esc(d.logo)}" class="lbl-hdr-logo">` : '📚'}
+      ${logo ? `<img src="${esc(logo)}" class="lbl-hdr-logo">` : '<span style="font-size:5pt">📚</span>'}
       <span class="lbl-hdr-school">${esc(school)}</span>
     </div>
-    <!-- Barcode -->
     <div class="lbl-bc-area">
       <svg id="${bcId}"></svg>
       <div class="lbl-bc-num">${esc(code)}</div>
     </div>
-    <!-- Title, Author, Abbreviation -->
-    <div class="lbl-info">
+    <div class="lbl-body">
       <div class="lbl-text">
         <div class="lbl-title">${esc(d.title||'')}</div>
         ${d.author ? `<div class="lbl-author">${esc(d.author)}</div>` : ''}
       </div>
-      <div class="lbl-abbr">${esc(abbr)}</div>
+      <div class="lbl-location" style="background:${esc(g.lt)};border-color:${esc(g.col)}">
+        <div class="lbl-loc-sec" style="color:${esc(g.col)}">${esc(sec||'–')}</div>
+        ${shelf ? `<div class="lbl-loc-shelf">${esc(shelf)}</div>` : ''}
+      </div>
     </div>
   </div>`;
 
-  // Draw barcode
   try {
     JsBarcode('#'+bcId, code, {
-      format:'CODE128', width:1.4, height:28,
+      format:'CODE128', width:1.2, height:22,
       displayValue:false, margin:0, background:'transparent'
     });
   } catch(e){}
@@ -1997,38 +1990,29 @@ function renderSL(cid, d, copyNum){
   </div>`;
 }
 
-// ── Mini page preview ───────────────────────────────────────────────
+// ── Mini page preview — 3-col grid ──────────────────────────────────
 function upMini(){
   const g = document.getElementById('lbl-mini');
   if(!g) return;
   const cur = {...getLD(), _cur:true};
   const all = [...labelBooks, cur];
-  g.innerHTML = all.map(b=>`
-    <div style="display:flex;gap:1px;align-items:center">
-      <div style="width:52px;height:15px;background:${b.group?.lt||'#eee'};border:1px solid ${b.group?.col||'#bbb'};border-radius:1px;opacity:${b._cur?1:.6}"></div>
-      <div style="width:52px;height:15px;background:${b.group?.lt||'#eee'};border:1px solid ${b.group?.col||'#bbb'};border-radius:1px;opacity:${b._cur?1:.6}"></div>
-      <div style="width:14px;height:15px;background:${b.group?.col||'#bbb'};border-radius:1px;opacity:${b._cur?1:.6}"></div>
-    </div>`).join('');
+  // Show as 3-col grid of small tiles
+  g.innerHTML = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px">' +
+    all.flatMap(b => Array.from({length:b.copies||1}, ()=>
+      `<div style="height:10px;background:${b.group?.lt||'#eee'};border:1px solid ${b.group?.col||'#bbb'};border-radius:1px;opacity:${b._cur?1:.6}"></div>`
+    )).join('') + '</div>';
 }
 
-// ── Rebuild the actual print sheet ──────────────────────────────────
+// ── Rebuild the actual print sheet — flat 3-col grid ────────────────
 function rebuildPrint(){
   const g = document.getElementById('print-grid');
   g.innerHTML = '';
   labelBooks.forEach((book, bi) => {
-    for(let c = 1; c <= book.copies; c++){
-      const row = document.createElement('div');
-      row.className = 'print-row';
-      // slot D1
-      const d1 = document.createElement('div'); d1.id=`ps_${bi}_${c}_d1`; row.appendChild(d1);
-      renderDL(d1, book, c);
-      // slot D2
-      const d2 = document.createElement('div'); d2.id=`ps_${bi}_${c}_d2`; row.appendChild(d2);
-      renderDL(d2, book, c);
-      // slot S
-      const s = document.createElement('div'); s.id=`ps_${bi}_${c}_s`; row.appendChild(s);
-      renderSL(s, book, c);
-      g.appendChild(row);
+    for(let c = 1; c <= (book.copies||1); c++){
+      const cell = document.createElement('div');
+      cell.className = 'print-row';
+      renderDL(cell, book, c);
+      g.appendChild(cell);
     }
   });
 }
@@ -2496,6 +2480,33 @@ function mbForceAutoLocation(){
 //  השלמת פרטים — Google Books API
 // ────────────────────────────────────────
 async function mbAutoFill(){
+  // ── First: check catalog for same series ──
+  const seriesVal=document.getElementById('mb-f-series').value.trim();
+  if(seriesVal && DB){
+    const sameSeriesBooks=DB.books.filter(b=>(b.series||'').trim()===seriesVal&&b.id!==editingBookId);
+    if(sameSeriesBooks.length>0){
+      const ref=sameSeriesBooks[0];
+      let seriesFilled=[];
+      if(ref.author&&!document.getElementById('mb-f-author').value.trim()){
+        document.getElementById('mb-f-author').value=ref.author;seriesFilled.push('מחבר');
+        mbLocationManual=false;mbAutoLocation();
+      }
+      if(ref.subject&&!document.getElementById('mb-f-subject').value.trim()){
+        document.getElementById('mb-f-subject').value=ref.subject;seriesFilled.push('נושא');
+      }
+      if(ref.tags?.length&&!document.getElementById('mb-f-tags').value.trim()){
+        document.getElementById('mb-f-tags').value=ref.tags.join(', ');seriesFilled.push('תגיות');
+      }
+      if(ref.group&&mbGrp?.id===GROUPS[0].id){
+        initGroupGrid('mb-grp-grid',ref.group);mbGrp=ref.group;
+        mbLocationManual=false;mbAutoLocation();seriesFilled.push('קבוצת גיל');
+      }
+      if(seriesFilled.length){
+        mbShowFillStatus('success','📚 הושלם מסדרה "'+seriesVal+'" ('+sameSeriesBooks.length+' ספרים): '+seriesFilled.join(', '));
+        return;
+      }
+    }
+  }
   const title=document.getElementById('mb-f-title').value.trim();
   if(!title){mbShowFillStatus('warning','הכנס שם ספר תחילה');return;}
 
