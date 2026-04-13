@@ -1858,7 +1858,25 @@ function renderLoans(){
 }
 function loanTab(t,el){loanTabCur=t;document.querySelectorAll('#view-loans .tab-item').forEach(x=>x.classList.remove('active'));el.classList.add('active');const ttls={active:'פעילות',overdue:'באיחור',history:'היסטוריה'};document.getElementById('loan-tab-ttl').textContent=ttls[t];renderLoans();}
 function findStudent(v){v=v.trim().toLowerCase();return DB.students.find(s=>s.card.toLowerCase()===v||(s.first+' '+s.last).toLowerCase().includes(v)||v.includes(s.card.toLowerCase()));}
-function findCopy(bc){bc=bc.trim();for(const b of DB.books){const c=b.copies.find(x=>x.bc===bc);if(c)return{book:b,copy:c};}return null;}
+function findCopy(bc){
+  bc=bc.trim();
+  if(!bc)return null;
+  for(const b of DB.books){
+    // Try exact copy barcode match first (e.g. "0101-1")
+    let c=b.copies.find(x=>x.bc===bc);
+    if(c)return{book:b,copy:c};
+    // Try base barcode match — return first available copy, else first copy
+    if(b.barcode===bc||bc.startsWith(b.barcode)){
+      const avail=b.copies.find(x=>x.status==='available');
+      c=avail||b.copies[0];
+      if(c)return{book:b,copy:c};
+    }
+    // Try partial: copy bc starts with input (e.g. user scanned "0101" matches "0101-1")
+    c=b.copies.find(x=>x.bc.startsWith(bc+'-')||x.bc===bc);
+    if(c)return{book:b,copy:c};
+  }
+  return null;
+}
 function showFB(msg,type='success'){const el=document.getElementById('loan-fb');el.innerHTML=`<div class="alert alert-${type}">${msg}</div>`;setTimeout(()=>el.innerHTML='',5000);}
 function addBookToPrintQueue(id){
   const book=DB.books.find(x=>x.id===id);if(!book)return;
