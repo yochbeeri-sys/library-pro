@@ -547,9 +547,14 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
       <div class="view" id="view-loans">
         <div class="quick-bar">
           <div class="field"><label>תלמיד</label><div style="display:flex;gap:6px"><input type="text" id="loan-s" placeholder="שם / כרטיס..." list="sl"><datalist id="sl"></datalist><button class="btn btn-teal btn-sm" onclick="openScan('loan-s')" style="font-size:15px;padding:6px 9px">📷</button></div></div>
-          <div class="field"><label>ספר (ברקוד)</label><div style="display:flex;gap:6px"><input type="text" id="loan-b" placeholder="סרוק..."><button class="btn btn-teal btn-sm" onclick="openScan('loan-b')" style="font-size:15px;padding:6px 9px">📷</button></div></div>
-          <button class="btn btn-accent btn-sm" onclick="doLoan()">✓ השאלה</button>
-          <button class="btn btn-success btn-sm" onclick="doReturn()">↩ החזרה</button>
+          <div class="field"><label>ספר (ברקוד)</label><div style="display:flex;gap:6px"><input type="text" id="loan-b" placeholder="סרוק..." oninput="loanBookPreview(this.value)" onkeydown="if(event.key==='Enter')doLoan()"><button class="btn btn-teal btn-sm" onclick="openScan('loan-b')" style="font-size:15px;padding:6px 9px">📷</button></div></div>
+          <div id="loan-book-preview" style="display:none;background:rgba(255,255,255,.15);border-radius:7px;padding:7px 11px;min-width:160px;border:1.5px solid rgba(255,255,255,.3)">
+            <div id="loan-book-title" style="font-size:12px;font-weight:800;color:#fff;line-height:1.3"></div>
+            <div id="loan-book-author" style="font-size:10px;color:rgba(255,255,255,.7);margin-top:2px"></div>
+            <div id="loan-book-status" style="font-size:10px;margin-top:3px;font-weight:700"></div>
+          </div>
+          <button class="btn btn-accent btn-sm" onclick="doLoan()" id="loan-btn-loan" style="opacity:.5;cursor:not-allowed" disabled>✓ השאלה</button>
+          <button class="btn btn-success btn-sm" onclick="doReturn()" id="loan-btn-return" style="opacity:.5;cursor:not-allowed" disabled>↩ החזרה</button>
         </div>
         <div id="loan-fb" style="margin-bottom:8px"></div>
         <div style="display:flex;gap:3px;background:var(--bg);border-radius:6px;padding:3px;margin-bottom:12px;width:fit-content">
@@ -1898,6 +1903,55 @@ function mbAddToPrintQueue(){
   labelBooks.push(d);renderLabelList();rebuildPrint();upMini();
   mbShowFillStatus('success','✅ נוסף לתור הדפסת הברקודים ('+nc+' עותקים)');
 }
+function loanBookPreview(val){
+  const prev=document.getElementById('loan-book-preview');
+  const tEl=document.getElementById('loan-book-title');
+  const aEl=document.getElementById('loan-book-author');
+  const stEl=document.getElementById('loan-book-status');
+  const btnL=document.getElementById('loan-btn-loan');
+  const btnR=document.getElementById('loan-btn-return');
+  val=val.trim();
+  if(!val||!DB){
+    prev.style.display='none';
+    btnL.disabled=true;btnL.style.opacity='.5';btnL.style.cursor='not-allowed';
+    btnR.disabled=true;btnR.style.opacity='.5';btnR.style.cursor='not-allowed';
+    return;
+  }
+  const found=findCopy(val);
+  if(!found){
+    prev.style.display='block';
+    tEl.textContent='ברקוד לא נמצא';
+    aEl.textContent='';
+    stEl.textContent='';
+    stEl.style.color='#ffaaaa';
+    btnL.disabled=true;btnL.style.opacity='.5';btnL.style.cursor='not-allowed';
+    btnR.disabled=true;btnR.style.opacity='.5';btnR.style.cursor='not-allowed';
+    return;
+  }
+  const {book,copy}=found;
+  prev.style.display='block';
+  tEl.textContent=book.title;
+  aEl.textContent=book.author||'';
+  const av=copy.status==='available';
+  const loaned=copy.status==='loaned'||copy.status==='overdue';
+  if(book.noLoan){
+    stEl.textContent='🚫 לא להשאלה';stEl.style.color='#ffaaaa';
+    btnL.disabled=true;btnL.style.opacity='.5';btnL.style.cursor='not-allowed';
+    btnR.disabled=true;btnR.style.opacity='.5';btnR.style.cursor='not-allowed';
+  } else if(av){
+    stEl.textContent='✅ זמין להשאלה';stEl.style.color='#aaffcc';
+    btnL.disabled=false;btnL.style.opacity='1';btnL.style.cursor='pointer';
+    btnR.disabled=true;btnR.style.opacity='.5';btnR.style.cursor='not-allowed';
+  } else if(loaned){
+    stEl.textContent='🔄 מושאל — ניתן להחזיר';stEl.style.color='#ffe08a';
+    btnL.disabled=true;btnL.style.opacity='.5';btnL.style.cursor='not-allowed';
+    btnR.disabled=false;btnR.style.opacity='1';btnR.style.cursor='pointer';
+  } else {
+    stEl.textContent='סטטוס: '+copy.status;stEl.style.color='rgba(255,255,255,.7)';
+    btnL.disabled=false;btnL.style.opacity='1';btnL.style.cursor='pointer';
+    btnR.disabled=false;btnR.style.opacity='1';btnR.style.cursor='pointer';
+  }
+}
 function doLoan(){
   const student=findStudent(document.getElementById('loan-s').value);if(!student){showFB('תלמיד לא נמצא','warning');return;}
   const al=DB.loans.filter(l=>(l.status==='active'||l.status==='overdue')&&l.studentId===student.id).length;
@@ -1910,10 +1964,10 @@ function doLoan(){
   DB.loans.push(loan);book.loanCount=(book.loanCount||0)+1;
   addAct(`${student.first} שאל/ה: "${book.title}"`,'#2980b9');
   showFB(`✅ "${book.title}" → ${student.first} ${student.last} | עד ${fmtDate(loan.dueDate)}`);
-  document.getElementById('loan-s').value='';document.getElementById('loan-b').value='';
+  document.getElementById('loan-s').value='';document.getElementById('loan-b').value='';loanBookPreview('');
   saveDB();
 }
-function doReturn(){const found=findCopy(document.getElementById('loan-b').value);if(!found){showFB('ברקוד לא נמצא','warning');return;}const loan=DB.loans.find(l=>l.copyBc===found.copy.bc&&(l.status==='active'||l.status==='overdue'));if(!loan){showFB('ספר זה אינו מושאל','warning');return;}returnLoan(loan.id);document.getElementById('loan-b').value='';}
+function doReturn(){const found=findCopy(document.getElementById('loan-b').value);if(!found){showFB('ברקוד לא נמצא','warning');return;}const loan=DB.loans.find(l=>l.copyBc===found.copy.bc&&(l.status==='active'||l.status==='overdue'));if(!loan){showFB('ספר זה אינו מושאל','warning');return;}returnLoan(loan.id);document.getElementById('loan-b').value='';loanBookPreview('');}
 function returnLoan(lid){
   const loan=DB.loans.find(x=>x.id===lid);if(!loan)return;
   const book=DB.books.find(x=>x.id===loan.bookId),student=DB.students.find(x=>x.id===loan.studentId);
@@ -2800,7 +2854,7 @@ function startScan(){
 
     const tgts={
       'loan-s':()=>document.getElementById('loan-s').value=code,
-      'loan-b':()=>document.getElementById('loan-b').value=code,
+      'loan-b':()=>{document.getElementById('loan-b').value=code;loanBookPreview(code);},
       'lf-bc':()=>{document.getElementById('lf-bc').value=code;upLP();},
       'mb-isbn':()=>{document.getElementById('mb-isbn').value=code;setTimeout(searchISBN,200);},
       'mb-f-bc':()=>document.getElementById('mb-f-bc').value=code,
