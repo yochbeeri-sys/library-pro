@@ -1296,7 +1296,7 @@ let nlColor=LIB_COLORS[0], nlIcon=LIB_ICONS[0];
 
 function loadLibrariesFromFirebase(){
   if(!fbDb){console.error('loadLibrariesFromFirebase: fbDb is null');return;}
-  document.getElementById('lib-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">⏳ טוען...</div>';
+  document.getElementById('lib-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">⏳ טוען ספריות...</div>';
   fbDb.ref('libraries').once('value').then(snap=>{
     libraries=[];
     snap.forEach(child=>{
@@ -1304,7 +1304,17 @@ function loadLibrariesFromFirebase(){
       if(meta) libraries.push({id:child.key,...meta});
     });
     renderLibList();
-  }).catch(e=>document.getElementById('lib-list').innerHTML=`<div style="color:var(--red);font-size:12px;padding:10px">שגיאה: ${e.message}<br>ודא שה-Realtime Database מופעל בפרויקט.</div>`);
+  }).catch(e=>{
+    const isPermission=e.code==='PERMISSION_DENIED'||e.message?.includes('permission');
+    document.getElementById('lib-list').innerHTML=`
+      <div style="color:var(--red);font-size:12px;padding:14px;line-height:2;background:#fbe6e6;border-radius:8px;margin:8px">
+        ${isPermission
+          ? '🔒 <strong>שגיאת הרשאות Firebase</strong><br>עברי ל-Firebase Console → Realtime Database → Rules<br>ושיני את הכללים ל: <code style="background:#fff;padding:1px 5px;border-radius:3px">".read": true, ".write": true</code>'
+          : '⚠️ שגיאה: '+e.message+'<br>ודא שה-Realtime Database מופעל.'
+        }
+        <br><button onclick="loadLibrariesFromFirebase()" style="margin-top:8px;padding:6px 14px;background:#0f2744;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:Heebo,sans-serif;font-size:12px">🔄 נסי שוב</button>
+      </div>`;
+  });
 }
 
 function initLauncherUI(){
