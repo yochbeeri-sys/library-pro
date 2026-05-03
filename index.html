@@ -3102,13 +3102,30 @@ function initFirebase(){
     fbDb  = firebase.database(fbApp);
     fbAuth = firebase.auth(fbApp);
     fbDb.ref('.info/connected').on('value', snap => setSyncStatus(snap.val()===true));
-    // Listen for auth state changes
+
+    // Sign in anonymously first — ensures auth is ready before reading DB
+    fbAuth.signInAnonymously().catch(()=>{});
+
     fbAuth.onAuthStateChanged(user => {
       currentAdmin = user;
       checkAdminStatus(user);
+      // Load libraries once we have any auth state (including anonymous)
+      if(!window._librariesLoaded){
+        window._librariesLoaded = true;
+        initLauncherUI();
+        loadLibrariesFromFirebase();
+      }
     });
-    initLauncherUI();
-    loadLibrariesFromFirebase();
+
+    // Fallback: load even if auth never fires (no rules requiring auth)
+    setTimeout(()=>{
+      if(!window._librariesLoaded){
+        window._librariesLoaded = true;
+        initLauncherUI();
+        loadLibrariesFromFirebase();
+      }
+    }, 2500);
+
   } catch(e) {
     document.getElementById('lib-list').innerHTML =
       `<div style="color:var(--red);font-size:12px;padding:14px">שגיאה: ${e.message}</div>`;
