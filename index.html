@@ -187,6 +187,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
 .nb-add-btn.exists{background:var(--muted);cursor:default}
 .nb-clear-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;border:1.5px solid var(--border);background:#fff;cursor:pointer;color:var(--red);font-family:'Heebo',sans-serif;transition:all .15s}
 .nb-clear-btn:hover{background:#fbe6e6;border-color:var(--red)}
+.admin-only{display:none} /* shown only when admin logged in */
 
 /* QUICK LOAN */
 .quick-bar{background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;gap:11px;align-items:flex-end}
@@ -499,6 +500,12 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
       <div class="nav-item" onclick="showView('reports',this)"><span class="icon">📊</span>דוחות</div>
       <div class="nav-item" onclick="showView('notebook',this)"><span class="icon">📓</span>מאגר NotebookLM</div>
       <div class="nav-item" onclick="showView('settings',this)"><span class="icon">⚙️</span>הגדרות</div>
+      <div id="nav-admin-btn" onclick="openAdminModal()"
+        style="margin:8px 10px 4px;padding:8px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;border:1.5px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);transition:all .2s"
+        onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background=''">
+        <span id="nav-admin-icon">🔒</span>
+        <span id="nav-admin-label">כניסת מנהל</span>
+      </div>
     </nav>
     <div class="sb-footer">
       <div class="sb-stats">
@@ -589,9 +596,9 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
             <div class="filter-chip active" onclick="fBooks('all',this)">הכל</div>
             <div id="grp-filters"></div>
             <div style="margin-right:auto;display:flex;gap:6px">
-              <button class="btn btn-sm btn-teal" onclick="openBulkImport()">📥 ייבוא מאסיבי</button>
+              <button class="btn btn-sm btn-teal admin-only" onclick="openBulkImport()">📥 ייבוא מאסיבי</button>
               <button class="btn btn-sm btn-ghost" onclick="exportBooks()">⬇ ייצוא</button>
-              <button class="btn btn-sm btn-primary" onclick="openAddBookModal()">+ ספר</button>
+              <button class="btn btn-sm btn-primary admin-only" onclick="openAddBookModal()">+ ספר</button>
             </div>
           </div>
           <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-end">
@@ -959,6 +966,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
           </div>
           <div style="display:flex;gap:7px">
             <button class="btn btn-ghost btn-sm" onclick="mbAddToPrintQueue()" title="הוסף לתור הדפסת ברקודים">🖨 הוסף לתור הדפסה</button>
+            <button class="btn btn-ghost btn-sm" onclick="saveBook(true)">שמור + הוסף עוד ➕</button>
             <button class="btn btn-primary" onclick="saveBook()">שמור ✓</button>
           </div>
         </div>
@@ -1200,6 +1208,8 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
 <!-- Firebase SDK — חייב להיות לפני הסקריפט הראשי -->
 <script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 
 <script>
 // ════════════════════════════════════════
@@ -1237,7 +1247,8 @@ const FB_CONFIG = {
 };
 
 // Firebase initialized in window.load (ensures SDK is ready)
-let fbApp = null, fbDb = null;
+let fbApp = null, fbDb = null, fbAuth = null;
+let currentAdmin = null; // Firebase auth user when admin is logged in
 
 let currentLibId=null, currentLibRef=null;
 let DB={books:[],students:[],loans:[],reservations:[],actLog:[],settings:{school:'',loanDays:14,maxBooks:3,logo:null},_ids:{book:100,student:1000,loan:1,res:1}};
@@ -1357,6 +1368,7 @@ function enterLibrary(id){
     checkOverdue();
     refreshCurrentView();
     updateSbStats();
+    checkAutoBackup();
   },err=>console.error('Firebase read error:',err));
 
   const sidebar=document.getElementById('sidebar');
@@ -1539,7 +1551,7 @@ function renderBooks(){
         <button class="btn btn-xs" style="background:var(--teal);color:#fff" onclick="goLabels(${b.id})">🏷</button>
         <button class="btn btn-xs" style="background:${printQueueIds.has(b.id)?'var(--green)':'#6366f1'};color:#fff" onclick="${printQueueIds.has(b.id)?'':' addBookToPrintQueue('+b.id+')'}" title="${printQueueIds.has(b.id)?'ברשימת ההדפסה':'הוסף לתור הדפסה'}">${printQueueIds.has(b.id)?'✓🖨':'🖨'}</button>
         ${!b.noLoan&&b.copies.filter(c=>c.status==='available').length>0?`<button class="btn btn-xs" style="background:var(--accent);color:#fff" onclick="quickLoan(${b.id})" title="השאל ספר">📤 השאל</button>`:''}
-        <button class="btn btn-xs btn-danger" onclick="delBook(${b.id})">🗑</button>
+        <button class="btn btn-xs btn-danger admin-only" onclick="delBook(${b.id})" title="מחק ספר (מנהל בלבד)">🗑</button>
       </div></td>
     </tr>`;
   }).join('')||`<tr><td colspan="8"><div class="empty-state"><div class="eicon">📚</div><h3>אין ספרים</h3></div></td></tr>`;
@@ -1695,7 +1707,7 @@ function selISBN(i){
   setTimeout(mbAutoLocation,50);
 }
 function loadCoverPhoto(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{coverB64=ev.target.result;document.getElementById('cover-up-disp').innerHTML=`<img src="${coverB64}" style="max-height:55px;max-width:100%;display:block;margin:0 auto 2px"><div style="font-size:9px;color:var(--muted)">לחץ להחלפה</div>`;const p=document.getElementById('mb-cover-prev');p.innerHTML='';p.style.cssText='';const img=document.createElement('img');img.src=coverB64;img.style.cssText='width:130px;height:175px;object-fit:cover;border-radius:7px';p.appendChild(img);};r.readAsDataURL(f);}
-function saveBook(){
+function saveBook(stayOpen=false){
   const title=document.getElementById('mb-f-title').value.trim();if(!title){alert('נא להכניס שם ספר');return;}
   const grpId=document.querySelector('#mb-grp-grid .gchip.sel')?.dataset.gid||GROUPS[0].id;
   const grp=GROUPS.find(g=>g.id===grpId)||GROUPS[0];
@@ -1724,7 +1736,32 @@ function saveBook(){
       subject,tags,year:selectedISBN?.year||'',series,seriesNum,noLoan});
     addAct(`ספר חדש: "${title}"`,'#2980b9');
   }
-  saveDB();closeModal('modal-book');coverB64=null;selectedISBN=null;
+  saveDB();
+  coverB64=null;selectedISBN=null;
+  if(stayOpen){
+    // Reset form for next book — keep group, section, shelf and series as defaults
+    const keepSeries=series;const keepGrp=grp;const keepSec=section;const keepShelf=shelf;
+    ['mb-f-title','mb-f-author','mb-f-bc','mb-f-subject','mb-f-tags','mb-f-series-num'].forEach(id=>{
+      const el=document.getElementById(id);if(el)el.value='';
+    });
+    document.getElementById('mb-f-series').value=keepSeries;
+    document.getElementById('mb-f-copies').value=1;
+    const nlEl=document.getElementById('mb-f-noloan');if(nlEl)nlEl.checked=false;
+    document.getElementById('mb-cover-prev').innerHTML='📚';
+    document.getElementById('mb-cover-prev').style.cssText='width:130px;height:175px;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;background:#f0ede6;display:flex;align-items:center;justify-content:center;font-size:36px';
+    const s=document.getElementById('mb-autofill-status');if(s)s.style.display='none';
+    editingBookId=null;mbLocationManual=false;
+    // Keep group + location
+    initGroupGrid('mb-grp-grid',keepGrp);mbGrp=keepGrp;
+    document.getElementById('mb-f-sec').value=keepSec;
+    document.getElementById('mb-f-shelf').value=keepShelf;
+    // Focus title field
+    setTimeout(()=>document.getElementById('mb-f-title')?.focus(),100);
+    // Flash feedback
+    mbShowFillStatus('success','✅ "'+title+'" נשמר! ניתן להוסיף ספר נוסף');
+  }else{
+    closeModal('modal-book');
+  }
 }
 function delBook(id){if(!confirm('מחק ספר?'))return;DB.books=DB.books.filter(b=>b.id!==id);saveDB();}
 function exportBooks(){const blob=new Blob([JSON.stringify(DB.books.map(b=>({title:b.title,author:b.author,barcode:b.barcode,section:b.section,shelf:b.shelf,group:b.group?.lbl,copies:b.copies.length})),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='books.json';a.click();}
@@ -1746,7 +1783,7 @@ function renderStudents(){
       <td style="font-family:'Space Mono',monospace;font-size:10px">${esc(s.card)}</td>
       <td>${al?`<span class="badge badge-orange">${al}</span>`:'–'}</td>
       <td style="font-weight:700;font-size:12px">${tl}</td>
-      <td><div class="td-act"><button class="btn btn-xs btn-ghost" onclick="showStudentDetail(${s.id})">פרופיל</button><button class="btn btn-xs btn-ghost" onclick="editStudent(${s.id})">✏️</button><button class="btn btn-xs btn-danger" onclick="delStudent(${s.id})">🗑</button></div></td>
+      <td><div class="td-act"><button class="btn btn-xs btn-ghost" onclick="showStudentDetail(${s.id})">פרופיל</button><button class="btn btn-xs btn-ghost" onclick="editStudent(${s.id})">✏️</button><button class="btn btn-xs btn-danger" onclick="delStudent(${s.id})" class="btn btn-xs btn-danger admin-only">🗑</button></div></td>
     </tr>`;
   }).join('')||`<tr><td colspan="6"><div class="empty-state"><div class="eicon">👥</div><h3>אין תלמידים</h3></div></td></tr>`;
 }
@@ -2930,7 +2967,13 @@ function initFirebase(){
     catch(e) { app = firebase.initializeApp(FB_CONFIG); }
     fbApp = app;
     fbDb  = firebase.database(fbApp);
+    fbAuth = firebase.auth(fbApp);
     fbDb.ref('.info/connected').on('value', snap => setSyncStatus(snap.val()===true));
+    // Listen for auth state changes
+    fbAuth.onAuthStateChanged(user => {
+      currentAdmin = user;
+      checkAdminStatus(user);
+    });
     initLauncherUI();
     loadLibrariesFromFirebase();
   } catch(e) {
@@ -2960,6 +3003,219 @@ function startApp(){
 }
 
 window.addEventListener('load', startApp);
+
+// ════════════════════════════════════════
+//  ADMIN AUTH
+// ════════════════════════════════════════
+function openAdminModal(){
+  if(currentAdmin && isAdminVerified){
+    document.getElementById('admin-modal-login').style.display='none';
+    document.getElementById('admin-modal-info').style.display='';
+    document.getElementById('admin-user-email').textContent=currentAdmin.email||currentAdmin.displayName||'מנהל';
+    renderAdminList();
+  }else{
+    document.getElementById('admin-modal-login').style.display='';
+    document.getElementById('admin-modal-info').style.display='none';
+    document.getElementById('admin-email-input').value='';
+    document.getElementById('admin-pass-input').value='';
+    document.getElementById('admin-auth-msg').textContent='';
+  }
+  openModal('modal-admin');
+  setTimeout(()=>document.getElementById('admin-email-input')?.focus(),200);
+}
+
+async function adminSignIn(){
+  const email=document.getElementById('admin-email-input').value.trim();
+  const pass=document.getElementById('admin-pass-input').value;
+  const msg=document.getElementById('admin-auth-msg');
+  if(!email||!pass){msg.textContent='נא למלא אימייל וסיסמה';msg.style.color='var(--red)';return;}
+  const btn=document.getElementById('admin-signin-btn');
+  btn.disabled=true;btn.textContent='⏳ מתחבר...';
+  try{
+    await fbAuth.signInWithEmailAndPassword(email,pass);
+    msg.textContent='✅ התחברת בהצלחה!';msg.style.color='var(--green)';
+    setTimeout(()=>closeModal('modal-admin'),800);
+  }catch(e){
+    const errs={'auth/wrong-password':'סיסמה שגויה','auth/user-not-found':'אימייל לא נמצא','auth/invalid-email':'אימייל לא תקין','auth/too-many-requests':'יותר מדי ניסיונות — נסי מאוחר יותר'};
+    msg.textContent=errs[e.code]||e.message;msg.style.color='var(--red)';
+  }finally{btn.disabled=false;btn.textContent='🔑 כניסה';}
+}
+
+async function adminSignInGoogle(){
+  const msg=document.getElementById('admin-auth-msg');
+  try{
+    const provider=new firebase.auth.GoogleAuthProvider();
+    await fbAuth.signInWithPopup(provider);
+    msg.textContent='✅ התחברת עם Google!';msg.style.color='var(--green)';
+    setTimeout(()=>closeModal('modal-admin'),800);
+  }catch(e){
+    msg.textContent=e.code==='auth/popup-closed-by-user'?'החלון נסגר — נסי שוב':e.message;
+    msg.style.color='var(--red)';
+  }
+}
+
+async function adminSignOut(){
+  await fbAuth.signOut();
+  isAdminVerified=false;
+  updateAdminUI();
+  closeModal('modal-admin');
+}
+
+// ── Admin list rendering ──
+async function renderAdminList(){
+  const el=document.getElementById('admin-list');
+  if(!el)return;
+  try{
+    const snap=await fbDb.ref('adminEmails').once('value');
+    const emails=snap.val()||{};
+    const entries=Object.entries(emails);
+    if(!entries.length){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:6px">אין מנהלים רשומים</div>';return;}
+    el.innerHTML=entries.map(([uid,email])=>`
+      <div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;background:#fff;margin-bottom:3px">
+        <span style="flex:1;direction:ltr;font-size:11px">${email}</span>
+        ${uid!==currentAdmin?.uid?`<button onclick="removeAdmin('${uid}')"
+          style="padding:2px 7px;border:none;border-radius:4px;background:var(--red);color:#fff;font-size:10px;cursor:pointer;font-family:Heebo,sans-serif">הסר</button>`:'<span style="font-size:9px;color:var(--green)">אתה</span>'}
+      </div>`).join('');
+    // Set current backup days
+    const bd=document.getElementById('backup-days-input');
+    if(bd&&DB?.settings?.backupDays)bd.value=DB.settings.backupDays;
+  }catch(e){el.innerHTML='<div style="color:var(--red);font-size:10px">'+e.message+'</div>';}
+}
+
+async function addAdminByEmail(){
+  const emailEl=document.getElementById('new-admin-email');
+  const msg=document.getElementById('admin-add-msg');
+  const email=emailEl.value.trim().toLowerCase();
+  if(!email){msg.textContent='הכנס אימייל';msg.style.color='var(--red)';return;}
+  if(!email.includes('@')){msg.textContent='אימייל לא תקין';msg.style.color='var(--red)';return;}
+  try{
+    // Find user UID by email via auth — not possible client-side
+    // Instead: store pending invite by email, checked on login
+    await fbDb.ref('adminInvites/'+email.replace(/\./g,'_')).set({
+      email, invitedBy:currentAdmin?.email||'', invitedAt:Date.now()
+    });
+    msg.textContent='✅ הזמנה נשמרה — '+email+' יקבל הרשאות בכניסה הבאה';
+    msg.style.color='var(--green)';
+    emailEl.value='';
+    setTimeout(()=>msg.textContent='',3000);
+  }catch(e){msg.textContent='שגיאה: '+e.message;msg.style.color='var(--red)';}
+}
+
+async function removeAdmin(uid){
+  if(!confirm('הסר מנהל זה?'))return;
+  await fbDb.ref('admins/'+uid).remove();
+  await fbDb.ref('adminEmails/'+uid).remove();
+  renderAdminList();
+}
+
+function saveBackupDays(){
+  const v=parseInt(document.getElementById('backup-days-input').value)||7;
+  if(DB&&DB.settings){DB.settings.backupDays=v;saveDB();}
+}
+
+// ── Check pending invite on login ──
+async function checkPendingInvite(user){
+  if(!user?.email)return;
+  const key=user.email.replace(/\./g,'_');
+  const snap=await fbDb.ref('adminInvites/'+key).once('value');
+  if(snap.exists()){
+    // Accept invite — grant admin
+    await fbDb.ref('admins/'+user.uid).set(true);
+    await fbDb.ref('adminEmails/'+user.uid).set(user.email);
+    await fbDb.ref('adminInvites/'+key).remove();
+    return true;
+  }
+  return false;
+}
+
+let isAdminVerified = false;
+
+async function checkAdminStatus(user){
+  if(!user){isAdminVerified=false;updateAdminUI();return;}
+  // Check pending invite first
+  const wasInvited=await checkPendingInvite(user);
+  if(wasInvited){isAdminVerified=true;updateAdminUI();return;}
+  try{
+    const snap=await fbDb.ref('admins/'+user.uid).once('value');
+    isAdminVerified=snap.exists()&&snap.val()===true;
+  }catch(e){
+    // No admins list yet — first user becomes admin
+    const snap=await fbDb.ref('admins').once('value');
+    if(!snap.exists()){
+      await fbDb.ref('admins/'+user.uid).set(true);
+      await fbDb.ref('adminEmails/'+user.uid).set(user.email||user.displayName||'מנהל');
+      isAdminVerified=true;
+    }else{isAdminVerified=false;}
+  }
+  updateAdminUI();
+}
+
+function updateAdminUI(){
+  const isAdmin = isAdminVerified;
+  const icon=document.getElementById('nav-admin-icon');
+  const label=document.getElementById('nav-admin-label');
+  const btn=document.getElementById('nav-admin-btn');
+  if(icon)icon.textContent=isAdmin?'🟢':'🔒';
+  if(label)label.textContent=isAdmin?(currentAdmin?.displayName||currentAdmin?.email?.split('@')[0]||'מנהל'):'כניסת מנהל';
+  if(btn)btn.style.color=isAdmin?'#7fff9a':'rgba(255,255,255,.6)';
+  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin?'':'none');
+  // Refresh admin panel if open
+  if(document.getElementById('admin-modal-info')?.style.display!=='none') renderAdminList();
+}
+
+// Backup & Email
+function exportBackup(){
+  if(!DB){alert('אין נתונים לגיבוי');return;}
+  const data={
+    exportDate:new Date().toISOString(),
+    library:currentLibId,
+    ...DB
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='LibraryPro_backup_'+new Date().toISOString().split('T')[0]+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function emailBackup(){
+  if(!DB){alert('אין נתונים לגיבוי');return;}
+  // Primary: download JSON (always works)
+  exportBackup();
+  // Secondary: open mailto as fallback
+  const adminEmail=currentAdmin?.email||'';
+  if(!adminEmail){alert('הגיבוי הורד. הגדר אימייל מנהל לשליחה אוטומטית.');return;}
+  const subject=encodeURIComponent('LibraryPro גיבוי — '+new Date().toLocaleDateString('he-IL'));
+  const body=encodeURIComponent(
+    'שלום,
+מצורף גיבוי נתוני הספרייה.
+
+'+
+    'תאריך: '+new Date().toLocaleString('he-IL')+'
+'+
+    'ספרים: '+(DB.books?.length||0)+' | תלמידים: '+(DB.students?.length||0)+'
+
+'+
+    'הקובץ הורד אוטומטית למחשב שלך.'
+  );
+  window.open('mailto:'+adminEmail+'?subject='+subject+'&body='+body);
+}
+
+// ── Auto-backup: every N days, remind admin to backup ──
+function checkAutoBackup(){
+  if(!isAdminVerified||!DB)return;
+  const lastKey='lpro_last_backup_'+currentLibId;
+  const last=parseInt(localStorage.getItem(lastKey)||'0');
+  const days=Math.floor((Date.now()-last)/(1000*60*60*24));
+  const interval=parseInt(DB.settings?.backupDays||7);
+  if(days>=interval){
+    const go=confirm('⏰ גיבוי אוטומטי — עברו '+days+' ימים מהגיבוי האחרון.
+הורד גיבוי עכשיו?');
+    if(go){exportBackup();localStorage.setItem(lastKey,Date.now());}
+  }
+}
 
 // ════════════════════════════════════════
 //  NOTEBOOK LM — import & search
@@ -3396,5 +3652,86 @@ function biDoImport(){
   if(currentView==='books')renderBooks();
 }
 </script>
+
+<!-- Admin Modal -->
+<div class="modal-overlay" id="modal-admin">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-header">
+      <h3>🔐 כניסת מנהל</h3>
+      <button class="modal-close" onclick="closeModal('modal-admin')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Login form -->
+      <div id="admin-modal-login">
+        <button onclick="adminSignInGoogle()"
+          style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 16px;border:1.5px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:'Heebo',sans-serif;margin-bottom:14px;transition:all .15s"
+          onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='#fff'">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:18px;height:18px">
+          כניסה עם Google
+        </button>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <span style="font-size:11px;color:var(--muted)">או</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+        <div class="field"><label>אימייל</label>
+          <input type="email" id="admin-email-input" placeholder="admin@school.co.il"
+            onkeydown="if(event.key==='Enter')document.getElementById('admin-pass-input').focus()">
+        </div>
+        <div class="field"><label>סיסמה</label>
+          <input type="password" id="admin-pass-input" placeholder="••••••••"
+            onkeydown="if(event.key==='Enter')adminSignIn()">
+        </div>
+        <div id="admin-auth-msg" style="font-size:12px;min-height:18px;text-align:center;margin-bottom:8px"></div>
+        <button id="admin-signin-btn" class="btn btn-primary" style="width:100%;justify-content:center" onclick="adminSignIn()">🔑 כניסה</button>
+      </div>
+
+      <!-- Logged-in info -->
+      <div id="admin-modal-info" style="display:none">
+        <div style="text-align:center;padding:6px 0 12px">
+          <div style="font-size:26px;margin-bottom:6px">🟢</div>
+          <div style="font-size:13px;font-weight:800;color:var(--navy)">מחובר כמנהל</div>
+          <div id="admin-user-email" style="font-size:11px;color:var(--muted);margin-top:3px"></div>
+        </div>
+
+        <!-- Backup section -->
+        <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:12px">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px">גיבוי נתונים</div>
+          <div style="display:flex;gap:6px;margin-bottom:8px">
+            <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" onclick="exportBackup()">⬇ הורד JSON</button>
+            <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" onclick="emailBackup()">📧 שלח במייל</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="font-size:11px;color:var(--text2);white-space:nowrap">גיבוי אוטו׳ כל</label>
+            <input type="number" id="backup-days-input" min="1" max="30" value="7"
+              style="width:50px;padding:4px 6px;border:1.5px solid var(--border);border-radius:5px;font-size:11px;text-align:center">
+            <label style="font-size:11px;color:var(--text2)">ימים</label>
+            <button class="btn btn-sm" style="background:var(--navy);color:#fff;font-size:10px;padding:4px 8px" onclick="saveBackupDays()">שמור</button>
+          </div>
+        </div>
+
+        <!-- Admins management -->
+        <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:12px">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px">ניהול מנהלים</div>
+          <div id="admin-list" style="max-height:120px;overflow-y:auto;margin-bottom:8px;font-size:11px"></div>
+          <div style="display:flex;gap:6px">
+            <input type="email" id="new-admin-email" placeholder="אימייל מנהל חדש"
+              style="flex:1;padding:5px 8px;border:1.5px solid var(--border);border-radius:5px;font-size:11px;direction:ltr"
+              onkeydown="if(event.key==='Enter')addAdminByEmail()">
+            <button class="btn btn-sm btn-primary" onclick="addAdminByEmail()">+ הוסף</button>
+          </div>
+          <div id="admin-add-msg" style="font-size:10px;min-height:14px;margin-top:4px;text-align:center"></div>
+          <div style="font-size:9px;color:var(--muted);margin-top:6px;line-height:1.5">
+            💡 המנהל החדש צריך להתחבר עם Google או אימייל כדי שהמשתמש שלו יירשם במערכת
+          </div>
+        </div>
+
+        <button class="btn btn-danger btn-sm" style="width:100%;justify-content:center" onclick="adminSignOut()">🔓 התנתק</button>
+      </div>
+
+    </div>
+  </div>
+</div>
 </body>
 </html>
