@@ -641,12 +641,15 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
       <!-- STUDENTS -->
       <div class="view" id="view-students">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
-          <div class="filter-chip active" onclick="fStudents('all',this)">הכל</div>
+          <div class="filter-chip active" onclick="fStudents('all',this)" id="sf-all">הכל</div>
+          <div class="filter-chip" onclick="fStudentsRole('student',this)" id="sf-student">🎒 תלמידים</div>
+          <div class="filter-chip" onclick="fStudentsRole('teacher',this)" id="sf-teacher">👩‍🏫 מורים / צוות</div>
           <div id="cls-filters"></div>
           <input type="text" id="ssearch" placeholder="חיפוש..." oninput="fStudentsText(this.value)" style="padding:4px 9px;border:1.5px solid var(--border);border-radius:20px;font-size:11px;direction:rtl;background:#fff;margin-right:auto;width:170px">
           <button class="btn btn-sm btn-ghost" onclick="document.getElementById('xl-import').click()" title="ייבוא מאקסל">📥 ייבוא מאקסל</button>
           <input type="file" id="xl-import" accept=".xlsx,.xls,.csv" style="display:none" onchange="importStudentsExcel(event)">
-          <button class="btn btn-sm btn-primary" onclick="openAddStudent()">+ תלמיד</button>
+          <button class="btn btn-sm btn-ghost" onclick="openAddStudent('teacher')">+ מורה / צוות</button>
+          <button class="btn btn-sm btn-primary" onclick="openAddStudent('student')">+ תלמיד</button>
         </div>
         <div class="card"><div class="card-header"><div class="card-title">תלמידים (<span id="students-cnt">0</span>)</div></div>
           <div style="padding:0"><div class="table-wrap"><table>
@@ -975,13 +978,46 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
   </div>
 </div>
 
-<!-- Student Modal -->
+<!-- Student / Staff Modal -->
 <div class="modal-overlay" id="modal-student">
-  <div class="modal"><div class="modal-header"><h3 id="ms-title-h">👤 הוסף תלמיד</h3><button class="modal-close" onclick="closeModal('modal-student')">✕</button></div>
+  <div class="modal"><div class="modal-header"><h3 id="ms-title-h">👤 הוסף משאיל</h3><button class="modal-close" onclick="closeModal('modal-student')">✕</button></div>
   <div class="modal-body">
-    <div class="cols2"><div class="field"><label>שם פרטי</label><input type="text" id="ms-first"></div><div class="field"><label>שם משפחה</label><input type="text" id="ms-last"></div></div>
-    <div class="cols2"><div class="field"><label>כיתה</label><select id="ms-cls"><option>א1</option><option>א2</option><option>ב1</option><option>ב2</option><option>ג1</option><option>ג2</option><option>ד1</option><option>ד2</option><option>ה1</option><option>ה2</option><option>ו1</option><option>ו2</option><option>ז1</option><option>ז2</option><option>ח1</option><option>ח2</option></select></div>
-    <div class="field"><label>מספר כרטיס</label><input type="text" id="ms-card" placeholder="אוטומטי"></div></div>
+    <!-- Role selector -->
+    <div class="field" style="margin-bottom:12px">
+      <label>סוג משאיל</label>
+      <div style="display:flex;gap:7px">
+        <label style="flex:1;display:flex;align-items:center;gap:7px;padding:8px 12px;border:2px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600" id="ms-role-student-lbl">
+          <input type="radio" name="ms-role" id="ms-role-student" value="student" checked onchange="msRoleChange()" style="accent-color:var(--blue)">
+          🎒 תלמיד/ה
+        </label>
+        <label style="flex:1;display:flex;align-items:center;gap:7px;padding:8px 12px;border:2px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600" id="ms-role-teacher-lbl">
+          <input type="radio" name="ms-role" id="ms-role-teacher" value="teacher" onchange="msRoleChange()" style="accent-color:var(--green)">
+          👩‍🏫 מורה / צוות
+        </label>
+      </div>
+    </div>
+    <div class="cols2">
+      <div class="field"><label>שם פרטי</label><input type="text" id="ms-first"></div>
+      <div class="field"><label>שם משפחה</label><input type="text" id="ms-last"></div>
+    </div>
+    <div class="cols2">
+      <!-- Dynamic: class for students, role/subject for teachers -->
+      <div class="field" id="ms-cls-wrap">
+        <label id="ms-cls-label">כיתה</label>
+        <select id="ms-cls">
+          <option>א1</option><option>א2</option><option>ב1</option><option>ב2</option>
+          <option>ג1</option><option>ג2</option><option>ד1</option><option>ד2</option>
+          <option>ה1</option><option>ה2</option><option>ו1</option><option>ו2</option>
+          <option>ז1</option><option>ז2</option><option>ח1</option><option>ח2</option>
+        </select>
+        <input type="text" id="ms-role-txt" placeholder="לדוגמה: מחנכת, מנהלת, יועצת..." style="display:none">
+      </div>
+      <div class="field"><label>מספר כרטיס / תז</label><input type="text" id="ms-card" placeholder="אוטומטי"></div>
+    </div>
+    <div class="field" id="ms-phone-wrap" style="display:none">
+      <label>טלפון (אופציונלי)</label>
+      <input type="text" id="ms-phone" placeholder="050-0000000">
+    </div>
   </div>
   <div class="modal-footer"><button class="btn btn-ghost btn-sm" onclick="closeModal('modal-student')">ביטול</button><button class="btn btn-primary btn-sm" onclick="saveStudent()">שמור</button></div></div>
 </div>
@@ -1480,6 +1516,9 @@ function updateSbStats(){
 function updateDataLists(){
   const al=document.getElementById('authors-list');
   if(al){const unique=[...new Set(DB.books.map(b=>b.author).filter(Boolean))].sort();al.innerHTML=unique.map(a=>`<option value="${a}">`).join('');}
+  // Loan datalist — students + teachers
+  const sl=document.getElementById('sl');
+  if(sl){sl.innerHTML=DB.students.map(s=>`<option value="${esc(s.first+' '+s.last+' ('+s.card+')')}">`).join('');}
   const sl=document.getElementById('sl');if(sl)sl.innerHTML=DB.students.map(s=>`<option value="${esc(s.first+' '+s.last)} (${s.card})">`).join('');
   const rssl=document.getElementById('rssl');if(rssl)rssl.innerHTML=DB.students.map(s=>`<option value="${s.first+' '+s.last}">`).join('');
   const rsbl=document.getElementById('rsbl');if(rsbl)rsbl.innerHTML=DB.books.map(b=>`<option value="${esc(b.title)}">`).join('');
@@ -1771,30 +1810,105 @@ function exportBooks(){const blob=new Blob([JSON.stringify(DB.books.map(b=>({tit
 // ════════════════════════════════════════
 let sFilter='all',sText='',editingStudentId=null;
 function initClassFilterChips(){const el=document.getElementById('cls-filters');if(!el)return;el.innerHTML=[...'אבגדהוזח'].map(l=>`<span class="filter-chip" onclick="fStudents('${l}',this)">כיתה ${l}</span>`).join(' ');}
+let sRoleFilter='all';
 function renderStudents(){
-  const list=DB.students.filter(s=>(sFilter==='all'||s.cls.startsWith(sFilter))&&(!sText||(s.first+s.last+s.card).includes(sText)));
+  const list=DB.students.filter(s=>{
+    if(sRoleFilter!=='all'&&(s.role||'student')!==sRoleFilter)return false;
+    if(sFilter!=='all'&&!(s.cls||'').startsWith(sFilter))return false;
+    if(sText&&!(s.first+s.last+s.card+(s.cls||'')+(s.roleText||'')).includes(sText))return false;
+    return true;
+  });
   document.getElementById('students-cnt').textContent=list.length;
   const cols=['#2980b9','#27ae60','#8e44ad','#c0392b','#d35400','#8B6914'];
   document.getElementById('students-tbody').innerHTML=list.map((s,i)=>{
     const al=DB.loans.filter(l=>(l.status==='active'||l.status==='overdue')&&l.studentId===s.id).length;
     const tl=DB.loans.filter(l=>l.studentId===s.id).length;
-    return`<tr><td><div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:50%;background:${cols[i%cols.length]};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">${esc(s.first[0])}</div><div style="font-weight:700;font-size:12px">${esc(s.first+' '+s.last)}</div></div></td>
-      <td><span class="badge badge-blue">${esc(s.cls)}</span></td>
+    const isTeacher=(s.role||'student')==='teacher';
+    const roleBadge=isTeacher
+      ?`<span class="badge" style="background:#e8f9ef;color:var(--green);font-size:9px;margin-right:4px">👩‍🏫 ${esc(s.roleText||'מורה')}</span>`
+      :`<span class="badge badge-blue" style="font-size:9px">${esc(s.cls||'')}</span>`;
+    const avatar=isTeacher?'👩‍🏫':(s.first[0]||'?');
+    const avatarBg=isTeacher?'#27ae60':cols[i%cols.length];
+    return`<tr>
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div style="width:28px;height:28px;border-radius:50%;background:${avatarBg};display:flex;align-items:center;justify-content:center;font-size:${isTeacher?'14px':'10px'};font-weight:700;color:#fff;flex-shrink:0">${avatar}</div>
+        <div><div style="font-weight:700;font-size:12px">${esc(s.first+' '+s.last)}</div>
+        ${s.phone?`<div style="font-size:10px;color:var(--muted)">${esc(s.phone)}</div>`:''}
+        </div></div></td>
+      <td>${roleBadge}</td>
       <td style="font-family:'Space Mono',monospace;font-size:10px">${esc(s.card)}</td>
       <td>${al?`<span class="badge badge-orange">${al}</span>`:'–'}</td>
       <td style="font-weight:700;font-size:12px">${tl}</td>
-      <td><div class="td-act"><button class="btn btn-xs btn-ghost" onclick="showStudentDetail(${s.id})">פרופיל</button><button class="btn btn-xs btn-ghost" onclick="editStudent(${s.id})">✏️</button><button class="btn btn-xs btn-danger" onclick="delStudent(${s.id})" class="btn btn-xs btn-danger admin-only">🗑</button></div></td>
+      <td><div class="td-act">
+        <button class="btn btn-xs btn-ghost" onclick="showStudentDetail(${s.id})">פרופיל</button>
+        <button class="btn btn-xs btn-ghost" onclick="editStudent(${s.id})">✏️</button>
+        <button class="btn btn-xs" style="background:var(--accent);color:#fff" onclick="quickLoanStudent(${s.id})" title="השאל ספר">📤</button>
+        <button class="btn btn-xs btn-danger" onclick="delStudent(${s.id})">🗑</button>
+      </div></td>
     </tr>`;
-  }).join('')||`<tr><td colspan="6"><div class="empty-state"><div class="eicon">👥</div><h3>אין תלמידים</h3></div></td></tr>`;
+  }).join('')||`<tr><td colspan="6"><div class="empty-state"><div class="eicon">👥</div><h3>אין משאילים</h3></div></td></tr>`;
 }
 function fStudents(f,el){sFilter=f;document.querySelectorAll('#view-students .filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderStudents();}
+function fStudentsRole(r,el){sRoleFilter=r;sFilter='all';document.querySelectorAll('#view-students .filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderStudents();}
 function fStudentsText(v){sText=v;renderStudents();}
-function openAddStudent(){editingStudentId=null;['ms-first','ms-last'].forEach(id=>document.getElementById(id).value='');document.getElementById('ms-card').value='';document.getElementById('ms-title-h').textContent='👤 הוסף תלמיד';openModal('modal-student');}
-function editStudent(id){const s=DB.students.find(x=>x.id===id);if(!s)return;editingStudentId=id;document.getElementById('ms-title-h').textContent='✏️ עריכה';document.getElementById('ms-first').value=s.first;document.getElementById('ms-last').value=s.last;document.getElementById('ms-cls').value=s.cls;document.getElementById('ms-card').value=s.card;openModal('modal-student');}
+function msRoleChange(){
+  const isTeacher=document.getElementById('ms-role-teacher').checked;
+  document.getElementById('ms-cls').style.display=isTeacher?'none':'';
+  document.getElementById('ms-role-txt').style.display=isTeacher?'':'none';
+  document.getElementById('ms-cls-label').textContent=isTeacher?'תפקיד / מקצוע':'כיתה';
+  document.getElementById('ms-phone-wrap').style.display=isTeacher?'':'none';
+  // Highlight selected
+  document.getElementById('ms-role-student-lbl').style.borderColor=isTeacher?'var(--border)':'var(--blue)';
+  document.getElementById('ms-role-teacher-lbl').style.borderColor=isTeacher?'var(--green)':'var(--border)';
+}
+function openAddStudent(defaultRole='student'){
+  editingStudentId=null;
+  ['ms-first','ms-last','ms-phone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('ms-card').value='';
+  document.getElementById('ms-title-h').textContent='👤 הוסף משאיל';
+  // Set role
+  document.getElementById('ms-role-teacher').checked=defaultRole==='teacher';
+  document.getElementById('ms-role-student').checked=defaultRole!=='teacher';
+  msRoleChange();
+  openModal('modal-student');
+  setTimeout(()=>document.getElementById('ms-first').focus(),200);
+}
+function editStudent(id){
+  const s=DB.students.find(x=>x.id===id);if(!s)return;
+  editingStudentId=id;
+  document.getElementById('ms-title-h').textContent='✏️ עריכה';
+  document.getElementById('ms-first').value=s.first;
+  document.getElementById('ms-last').value=s.last;
+  document.getElementById('ms-card').value=s.card;
+  const isTeacher=(s.role||'student')==='teacher';
+  document.getElementById('ms-role-teacher').checked=isTeacher;
+  document.getElementById('ms-role-student').checked=!isTeacher;
+  msRoleChange();
+  if(isTeacher){document.getElementById('ms-role-txt').value=s.roleText||'';}
+  else{document.getElementById('ms-cls').value=s.cls||'א1';}
+  const phEl=document.getElementById('ms-phone');if(phEl)phEl.value=s.phone||'';
+  openModal('modal-student');
+}
 function saveStudent(){
-  const first=document.getElementById('ms-first').value.trim(),last=document.getElementById('ms-last').value.trim();if(!first||!last){alert('נא למלא שם מלא');return;}
-  if(editingStudentId){const s=DB.students.find(x=>x.id===editingStudentId);s.first=first;s.last=last;s.cls=document.getElementById('ms-cls').value;}
-  else{DB._ids.student++;DB.students.push({id:DB._ids.student,first,last,cls:document.getElementById('ms-cls').value,card:'S'+DB._ids.student,debt:0});addAct(`תלמיד חדש: ${first} ${last}`,'#27ae60');}
+  const first=document.getElementById('ms-first').value.trim();
+  const last=document.getElementById('ms-last').value.trim();
+  if(!first||!last){alert('נא למלא שם מלא');return;}
+  const isTeacher=document.getElementById('ms-role-teacher').checked;
+  const role=isTeacher?'teacher':'student';
+  const cls=isTeacher?'צוות':document.getElementById('ms-cls').value;
+  const roleText=isTeacher?(document.getElementById('ms-role-txt').value.trim()||'מורה'):'';
+  const phone=(document.getElementById('ms-phone')?.value||'').trim();
+  if(editingStudentId){
+    const s=DB.students.find(x=>x.id===editingStudentId);
+    s.first=first;s.last=last;s.cls=cls;s.role=role;s.roleText=roleText;
+    if(phone)s.phone=phone;
+  }else{
+    DB._ids.student++;
+    const prefix=isTeacher?'T':'S';
+    DB.students.push({id:DB._ids.student,first,last,cls,role,roleText,phone,
+      card:prefix+DB._ids.student,debt:0});
+    addAct(`${isTeacher?'מורה/צוות':'תלמיד'} חדש: ${first} ${last}`,isTeacher?'#27ae60':'#2980b9');
+  }
   saveDB();closeModal('modal-student');
 }
 function importStudentsExcel(event){
@@ -2003,6 +2117,15 @@ function loanBookPreview(val){
     btnL.disabled=false;btnL.style.opacity='1';btnL.style.cursor='pointer';
     btnR.disabled=false;btnR.style.opacity='1';btnR.style.cursor='pointer';
   }
+}
+function quickLoanStudent(studentId){
+  const s=DB.students.find(x=>x.id===studentId);if(!s)return;
+  showView('loans',null);
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.querySelector('.nav-item[onclick*="loans"]')?.classList.add('active');
+  const lsEl=document.getElementById('loan-s');
+  if(lsEl){lsEl.value=s.first+' '+s.last+' ('+s.card+')';}
+  setTimeout(()=>document.getElementById('loan-b')?.focus(),150);
 }
 function quickLoan(bookId){
   // Navigate to loans view and pre-fill barcode
