@@ -1529,7 +1529,6 @@ function updateDataLists(){
   // Loan datalist — students + teachers
   const sl=document.getElementById('sl');
   if(sl){sl.innerHTML=DB.students.map(s=>`<option value="${esc(s.first+' '+s.last+' ('+s.card+')')}">`).join('');}
-  const sl=document.getElementById('sl');if(sl)sl.innerHTML=DB.students.map(s=>`<option value="${esc(s.first+' '+s.last)} (${s.card})">`).join('');
   const rssl=document.getElementById('rssl');if(rssl)rssl.innerHTML=DB.students.map(s=>`<option value="${s.first+' '+s.last}">`).join('');
   const rsbl=document.getElementById('rsbl');if(rsbl)rsbl.innerHTML=DB.books.map(b=>`<option value="${esc(b.title)}">`).join('');
   const lcatl=document.getElementById('lcatl');if(lcatl)lcatl.innerHTML=DB.books.map(b=>`<option value="${esc(b.title)}">`).join('');
