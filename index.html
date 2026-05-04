@@ -1268,7 +1268,6 @@ const todayStr=()=>new Date().toISOString().split('T')[0];
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x.toISOString().split('T')[0];};
 const dLeft=due=>Math.round((new Date(due)-new Date(todayStr()))/86400000);
 const authorShort=a=>{if(!a)return'';const p=a.trim().split(/\s+/);return p[p.length-1].substring(0,5).toUpperCase()};
-
 // ════════════════════════════════════════
 //  FIREBASE — CONFIG קבוע
 // ════════════════════════════════════════
@@ -1281,19 +1280,15 @@ const FB_CONFIG = {
   messagingSenderId: "918055705962",
   appId: "1:918055705962:web:c55643b1ad2d20720b5913"
 };
-
 // Firebase initialized in window.load (ensures SDK is ready)
 let fbApp = null, fbDb = null, fbAuth = null;
 let currentAdmin = null; // Firebase auth user when admin is logged in
-
 let currentLibId=null, currentLibRef=null;
 let DB={books:[],students:[],loans:[],reservations:[],actLog:[],settings:{school:'',loanDays:14,maxBooks:3,logo:null},_ids:{book:100,student:1000,loan:1,res:1}};
 let unsubscribe=null;
-
 // ═══ ALL STATE VARS UP TOP (prevents TDZ errors) ═══
 let libraries=[];
 let nlColor=LIB_COLORS[0], nlIcon=LIB_ICONS[0];
-
 function loadLibrariesFromFirebase(){
   if(!fbDb){console.error('loadLibrariesFromFirebase: fbDb is null');return;}
   document.getElementById('lib-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">⏳ טוען ספריות...</div>';
@@ -1316,17 +1311,14 @@ function loadLibrariesFromFirebase(){
       </div>`;
   });
 }
-
 function initLauncherUI(){
   const sw=document.getElementById('color-swatches');
   if(sw) sw.innerHTML=LIB_COLORS.map((c,i)=>`<div class="swatch${i===0?' sel':''}" style="background:${c}" onclick="selColor('${c}',this)"></div>`).join('');
   const ip=document.getElementById('icon-picker');
   if(ip) ip.innerHTML=LIB_ICONS.map((ic,i)=>`<div onclick="selIcon('${ic}',this)" style="width:32px;height:32px;border-radius:6px;background:${i===0?'var(--navy)':'var(--surface2)'};display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;border:2px solid ${i===0?'var(--navy)':'var(--border)'};">${ic}</div>`).join('');
 }
-
 function selColor(c,el){nlColor=c;document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('sel'));el.classList.add('sel');}
 function selIcon(ic,el){nlIcon=ic;document.querySelectorAll('#icon-picker>div').forEach(d=>{d.style.background='var(--surface2)';d.style.borderColor='var(--border)';});el.style.background='var(--navy)';el.style.borderColor='var(--navy)';}
-
 function renderLibList(){
   const el=document.getElementById('lib-list');
   if(!libraries.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">אין ספריות עדיין. צור ספרייה חדשה.</div>';return;}
@@ -1338,10 +1330,8 @@ function renderLibList(){
       <button class="lib-del" onclick="deleteLib('${l.id}',event)">🗑</button>
     </div>`).join('');
 }
-
 function showNewLibForm(){document.getElementById('lib-list-screen').style.display='none';document.getElementById('pin-screen').style.display='none';document.getElementById('new-lib-form').style.display='block';}
 function backToLibList(){document.getElementById('lib-list-screen').style.display='block';document.getElementById('pin-screen').style.display='none';document.getElementById('new-lib-form').style.display='none';pinBuf='';updPin();}
-
 function createLibrary(){
   const name=document.getElementById('nl-name').value.trim();
   const school=document.getElementById('nl-school').value.trim();
@@ -1356,7 +1346,6 @@ function createLibrary(){
     renderLibList();
   }).catch(e=>alert('שגיאה ביצירת ספרייה: '+e.message));
 }
-
 function deleteLib(id,e){
   e.stopPropagation();
   const lib=libraries.find(l=>l.id===id);
@@ -1366,7 +1355,6 @@ function deleteLib(id,e){
     renderLibList();
   });
 }
-
 // ════════════════════════════════════════
 //  PIN
 // ════════════════════════════════════════
@@ -1388,7 +1376,6 @@ function checkPin(){
   if(pinBuf===pinLib.pin){document.getElementById('pin-err').textContent='';enterLibrary(pinLib.id);}
   else{document.getElementById('pin-err').textContent='קוד שגוי. נסה שוב.';pinBuf='';updPin();}
 }
-
 // ════════════════════════════════════════
 //  ENTER LIBRARY + REAL-TIME LISTENER
 // ════════════════════════════════════════
@@ -1429,14 +1416,12 @@ function enterLibrary(id){
   upLP(); updateLabelDataLists();
   showView('dashboard',document.querySelector('.nav-item'));
 }
-
 // Firebase arrays are stored as objects → convert back
 function fbArrToArr(obj){
   if(!obj)return[];
   if(Array.isArray(obj))return obj.filter(x=>x!=null);
   return Object.values(obj).filter(x=>x!=null);
 }
-
 function logout(){
   if(unsubscribe)unsubscribe();
   if(currentLibRef)currentLibRef.off();
@@ -1445,7 +1430,6 @@ function logout(){
   document.getElementById('launcher').style.display='flex';
   loadLibrariesFromFirebase();
 }
-
 // ════════════════════════════════════════
 //  SAVE TO FIREBASE (debounced)
 // ════════════════════════════════════════
@@ -1468,13 +1452,11 @@ function saveDB(){
     currentLibRef.update(toSave).catch(e=>console.error('Save error:',e));
   },400);
 }
-
 function arrToFbObj(arr){
   const obj={};
   arr.forEach((item,i)=>{if(item)obj[i]=item;});
   return obj;
 }
-
 // ════════════════════════════════════════
 //  NAVIGATION
 // ════════════════════════════════════════
@@ -1507,7 +1489,6 @@ function refreshCurrentView(){
   }
   updateDataLists();
 }
-
 // ════════════════════════════════════════
 //  SIDEBAR STATS
 // ════════════════════════════════════════
@@ -1534,7 +1515,6 @@ function updateDataLists(){
   const lcatl=document.getElementById('lcatl');if(lcatl)lcatl.innerHTML=DB.books.map(b=>`<option value="${esc(b.title)}">`).join('');
 }
 function addAct(text,color){DB.actLog.unshift({text,color,time:new Date().toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})});if(DB.actLog.length>50)DB.actLog.pop();}
-
 // ════════════════════════════════════════
 //  DASHBOARD
 // ════════════════════════════════════════
@@ -1552,7 +1532,6 @@ function renderDash(){
   const odl=document.getElementById('od-list');
   if(odl)odl.innerHTML=DB.loans.filter(l=>l.status==='overdue').map(l=>{const s=DB.students.find(x=>x.id===l.studentId);const b=DB.books.find(x=>x.id===l.bookId);return`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><div><div style="font-size:11px;font-weight:600">${esc(s?.first+' '+s?.last)}</div><div style="font-size:10px;color:var(--muted)">${esc(b?.title)}</div></div><span class="badge badge-red">${Math.abs(dLeft(l.dueDate))}י'</span></div>`}).join('')||'<div style="text-align:center;padding:16px;color:var(--muted);font-size:11px">אין באיחור ✅</div>';
 }
-
 // ════════════════════════════════════════
 //  BOOKS
 // ════════════════════════════════════════
@@ -1606,7 +1585,6 @@ function renderBooks(){
 }
 function fBooks(f,el){bFilter=f;document.querySelectorAll('#view-books .filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderBooks();}
 function fBooksText(v){bText=v;renderBooks();}
-
 // ════════════════════════════════════════
 //  ADD BOOK MODAL
 // ════════════════════════════════════════
@@ -1660,7 +1638,6 @@ function setStep(n){
 }
 function goStep2(){setStep(2);}
 function backStep(){setStep(1);}
-
 let isbnDebounce=null;
 function autoISBN(v){clearTimeout(isbnDebounce);if(v.replace(/[-\s]/g,'').length>=10)isbnDebounce=setTimeout(searchISBN,700);}
 async function searchISBN(){
@@ -1707,7 +1684,6 @@ async function gbFetch(q){
   const r=await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=9`);
   return r.json();
 }
-
 function showLoading(){
   document.getElementById('isbn-loading').style.display='block';
   document.getElementById('isbn-results').innerHTML='';
@@ -1717,7 +1693,6 @@ function showNone(){
   document.getElementById('isbn-loading').style.display='none';
   document.getElementById('isbn-none').style.display='block';
 }
-
 // הכנסה ידנית — דולגת ישירות לשלב 2 עם שדות ריקים
 function goManual(){
   ['mb-f-title','mb-f-author','mb-f-bc','mb-f-sec','mb-f-shelf','mb-f-subject','mb-f-tags','mb-f-series'].forEach(id=>document.getElementById(id).value='');
@@ -1813,7 +1788,6 @@ function saveBook(stayOpen=false){
 }
 function delBook(id){if(!confirm('מחק ספר?'))return;DB.books=DB.books.filter(b=>b.id!==id);saveDB();}
 function exportBooks(){const blob=new Blob([JSON.stringify(DB.books.map(b=>({title:b.title,author:b.author,barcode:b.barcode,section:b.section,shelf:b.shelf,group:b.group?.lbl,copies:b.copies.length})),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='books.json';a.click();}
-
 // ════════════════════════════════════════
 //  STUDENTS
 // ════════════════════════════════════════
@@ -1935,8 +1909,7 @@ function importStudentsExcel(event){
       if(!rows.length){ alert('הקובץ ריק או לא נקרא כהלכה'); return; }
 
       // Normalize column names (support Hebrew + English variants)
-      const norm = s => String(s||'').trim().toLowerCase()
-        .replace(/\s+/g,'').replace(/['"]/g,'');
+      const norm = s => String(s||'').trim().toLowerCase().replace(/\s+/g,'').replace(/['"]/g,'');
 
       const COL_FIRST  = ['שםפרטי','first','firstname','שם_פרטי','פרטי'];
       const COL_LAST   = ['שםמשפחה','last','lastname','שם_משפחה','משפחה'];
@@ -1958,7 +1931,7 @@ function importStudentsExcel(event){
       const cCard  = findCol(COL_CARD,  firstRow);
 
       if(!cFirst || !cLast){
-        alert('לא נמצאו עמודות שם פרטי / שם משפחה.\n\nוודאי שהקובץ כולל עמודות בשם:\nשם פרטי | שם משפחה | כיתה');
+        alert('לא נמצאו עמודות שם פרטי / שם משפחה.\nוודאי שהקובץ כולל עמודות בשם:\nשם פרטי | שם משפחה | כיתה');
         return;
       }
 
@@ -1987,7 +1960,8 @@ function importStudentsExcel(event){
       }
 
       const msg = added > 0
-        ? `✅ יובאו ${added} תלמידים בהצלחה${skipped>0 ? `\n(${skipped} שורות דולגו — כפילויות / ריקות)` : ''}`
+        ? `✅ יובאו ${added} תלמידים בהצלחה${skipped>0 ? `
+(${skipped} שורות דולגו — כפילויות / ריקות)` : ''}`
         : `לא נוספו תלמידים חדשים (${skipped} כפילויות / שורות ריקות)`;
       alert(msg);
     } catch(err){
@@ -3348,8 +3322,7 @@ function checkAutoBackup(){
   const days=Math.floor((Date.now()-last)/(1000*60*60*24));
   const interval=parseInt(DB.settings?.backupDays||7);
   if(days>=interval){
-    const go=confirm('⏰ גיבוי אוטומטי — עברו '+days+' ימים מהגיבוי האחרון.
-הורד גיבוי עכשיו?');
+    const go=confirm('⏰ גיבוי אוטומטי — עברו '+days+' ימים מהגיבוי האחרון.\nהורד גיבוי עכשיו?');
     if(go){exportBackup();localStorage.setItem(lastKey,Date.now());}
   }
 }
