@@ -3332,15 +3332,9 @@ function emailBackup(){
   if(!adminEmail){alert('הגיבוי הורד. הגדר אימייל מנהל לשליחה אוטומטית.');return;}
   const subject=encodeURIComponent('LibraryPro גיבוי — '+new Date().toLocaleDateString('he-IL'));
   const body=encodeURIComponent(
-    'שלום,
-מצורף גיבוי נתוני הספרייה.
-
-'+
-    'תאריך: '+new Date().toLocaleString('he-IL')+'
-'+
-    'ספרים: '+(DB.books?.length||0)+' | תלמידים: '+(DB.students?.length||0)+'
-
-'+
+    'שלום,\nמצורף גיבוי נתוני הספרייה.\n\n'+
+    'תאריך: '+new Date().toLocaleString('he-IL')+'\n'+
+    'ספרים: '+(DB.books?.length||0)+' | תלמידים: '+(DB.students?.length||0)+'\n\n'+
     'הקובץ הורד אוטומטית למחשב שלך.'
   );
   window.open('mailto:'+adminEmail+'?subject='+subject+'&body='+body);
