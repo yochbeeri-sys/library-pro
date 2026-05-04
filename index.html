@@ -3101,34 +3101,28 @@ function initFirebase(){
     fbApp = app;
     fbDb  = firebase.database(fbApp);
     fbAuth = firebase.auth(fbApp);
+
     fbDb.ref('.info/connected').on('value', snap => setSyncStatus(snap.val()===true));
 
-    // Sign in anonymously first — ensures auth is ready before reading DB
-    fbAuth.signInAnonymously().catch(()=>{});
-
+    // Auth state listener (for admin features only)
     fbAuth.onAuthStateChanged(user => {
       currentAdmin = user;
       checkAdminStatus(user);
-      // Load libraries once we have any auth state (including anonymous)
-      if(!window._librariesLoaded){
-        window._librariesLoaded = true;
-        initLauncherUI();
-        loadLibrariesFromFirebase();
-      }
     });
 
-    // Fallback: load even if auth never fires (no rules requiring auth)
-    setTimeout(()=>{
-      if(!window._librariesLoaded){
-        window._librariesLoaded = true;
-        initLauncherUI();
-        loadLibrariesFromFirebase();
-      }
-    }, 2500);
+    // Try anonymous sign-in in background (non-blocking)
+    fbAuth.signInAnonymously().catch(()=>{});
+
+    // Load libraries IMMEDIATELY — do not wait for auth
+    initLauncherUI();
+    loadLibrariesFromFirebase();
 
   } catch(e) {
     document.getElementById('lib-list').innerHTML =
-      `<div style="color:var(--red);font-size:12px;padding:14px">שגיאה: ${e.message}</div>`;
+      `<div style="color:var(--red);font-size:12px;padding:14px;line-height:2">
+        ⚠️ שגיאת Firebase: ${e.message}<br>
+        <button onclick="location.reload()" style="margin-top:8px;padding:6px 14px;background:#0f2744;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:Heebo,sans-serif;font-size:12px">🔄 נסי שוב</button>
+      </div>`;
     console.error('Firebase init error:', e);
   }
 }
