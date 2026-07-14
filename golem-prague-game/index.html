@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="בְּעִקְבוֹת הַגּוֹלֶם וְגַלְגַּלֵּי הַשִּׁנַּיִם - מִשְׂחָק נִיווּט וְחֵקֶר בְּפְרָאג">
+<title>בְּעִקְבוֹת הַגּוֹלֶם וְגַלְגַּלֵּי הַשִּׁנַּיִם</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+  <button id="muteBtn" class="mute-btn" aria-label="הַשְׁתָּקָה">🔊</button>
+
+  <!-- ===================== מסך בית ===================== -->
+  <section id="homeScreen" class="screen">
+    <h1 class="app-title">בְּעִקְבוֹת הַגּוֹלֶם<br>וְגַלְגַּלֵּי הַשִּׁנַּיִם</h1>
+    <p class="app-subtitle">הַרְפַּתְקָה שֶׁל אוֹרִי בְּעִיר פְּרָאג</p>
+
+    <div id="grandBanner" class="grand-banner" style="display:none">
+      🏆 כֹּל הַכָּבוֹד! סִיַּמְתָּ אֶת כָּל הַהַרְפַּתְקָה! 🏆
+    </div>
+
+    <div class="journey-path">
+      <div id="homeStages"></div>
+    </div>
+  </section>
+
+  <!-- ===================== מסך חידה ===================== -->
+  <section id="questionScreen" class="screen">
+    <div id="stageTrail" class="stage-progress-trail"></div>
+
+    <div id="riddleScene" class="riddle-scene"></div>
+
+    <div class="riddle-card">
+      <div id="riddlePlace" class="riddle-place"></div>
+      <p id="riddleText" class="riddle-text"></p>
+      <div id="optionsList" class="options-list"></div>
+      <div id="toast" class="toast"></div>
+    </div>
+
+    <span class="back-home-link">חֲזָרָה לַמַּסָּע</span>
+  </section>
+
+  <!-- ===================== מסך סיכום שלב ===================== -->
+  <section id="stageSummaryScreen" class="screen">
+    <div id="summaryScene" class="summary-scene"></div>
+    <div class="summary-card">
+      <div class="stars-row">
+        <span>⭐</span><span>⭐</span><span>⭐</span><span>⭐</span><span>⭐</span>
+      </div>
+      <div id="summaryTitle" class="summary-title"></div>
+      <div id="summarySub" class="summary-sub"></div>
+      <button id="summaryNextBtn" class="big-btn">לַשָּׁלָב הַבָּא</button>
+      <button class="big-btn secondary back-home-link">חֲזָרָה לַמַּסָּע</button>
+    </div>
+  </section>
+
+  <!-- ===================== מסך סיום כללי ===================== -->
+  <section id="finalSummaryScreen" class="screen" style="position:relative">
+    <div id="finalConfettiLayer" style="position:absolute;inset:0;overflow:hidden;pointer-events:none"></div>
+    <div class="summary-scene" style="background:linear-gradient(135deg,#fff3d6,#ffe6cf);display:flex;align-items:center;justify-content:center;height:190px">
+      <div style="width:160px;height:160px" id="finalCharacter"></div>
+    </div>
+    <div class="summary-card">
+      <div class="stars-row">
+        <span>🌟</span><span>🌟</span><span>🌟</span><span>🌟</span><span>🌟</span>
+      </div>
+      <div class="summary-title">אַלּוּף פְּרָאג הַקָּטָן!</div>
+      <div class="summary-sub">אוֹרִי גִּלָּה אֶת כָּל סוֹדוֹת הָעִיר, מִשְּׂדֵה הַתְּעוּפָה וְעַד הַטִּירָה. הַגּוֹלֶם וְגַלְגַּלֵּי הַשִּׁנַּיִם גֵּאִים בְּךָ מְאֹד!</div>
+      <button id="playAgainBtn" class="big-btn">לְשַׂחֵק שׁוּב מֵהַהַתְחָלָה</button>
+    </div>
+  </section>
+</div>
+
+<!-- ===================== שכבת חיזוק חיובי ===================== -->
+<div id="celebrationOverlay" class="celebration-overlay">
+  <div id="confettiLayer" style="position:absolute;inset:0;overflow:hidden;pointer-events:none"></div>
+  <div class="celebration-card">
+    <div id="celebrationCharacter" class="celebration-character"></div>
+    <div id="celebrationPhrase" class="celebration-phrase"></div>
+    <button id="celebrationNextBtn" class="celebration-next-btn">הָלְאָה! ←</button>
+  </div>
+</div>
+
+<script src="js/riddles-data.js"></script>
+<script src="js/illustrations.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/reinforcement.js"></script>
+<script src="js/app.js"></script>
+<script>
+  // דמות קטנה במסך הסיום הכללי (סטטית, לא תלוית לוגיקת חגיגה)
+  document.addEventListener('DOMContentLoaded', function () {
+    var finalChar = document.getElementById('finalCharacter');
+    if (finalChar) finalChar.innerHTML = Illustrations.golem('happy');
+  });
+</script>
+</body>
+</html>
