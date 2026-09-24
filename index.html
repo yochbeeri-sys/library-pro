@@ -2153,7 +2153,21 @@ function saveBook(stayOpen=false){
     closeModal('modal-book');
   }
 }
-function delBook(id){if(!confirm('מחק ספר?'))return;DB.books=DB.books.filter(b=>b.id!==id);saveDB();}
+function delBook(id){
+  const book=DB.books.find(b=>b.id===id);if(!book)return;
+  if(DB.loans.some(l=>l.bookId===id&&(l.status==='active'||l.status==='overdue'))){
+    alert('לא ניתן למחוק ספר שיש לו עותקים מושאלים כרגע. יש להחזיר את כל העותקים תחילה.');
+    return;
+  }
+  if(!confirm(`למחוק את הספר "${book.title}" מהקטלוג?`))return;
+  DB.books=DB.books.filter(b=>b.id!==id);
+  DB.reservations=DB.reservations.filter(r=>r.bookId!==id);
+  printQueueIds.delete(id);
+  labelBooks=labelBooks.filter(l=>l.barcode!==book.barcode);
+  addAct(`הספר "${book.title}" נמחק מהקטלוג`,'#c0392b');
+  renderBooks();renderRes();renderLabelList();rebuildPrint();upMini();savePrintQueue();
+  saveDB();
+}
 function exportBooks(){const blob=new Blob([JSON.stringify(DB.books.map(b=>({title:b.title,author:b.author,barcode:b.barcode,section:b.section,shelf:b.shelf,group:b.group?.lbl,copies:b.copies.length})),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='books.json';a.click();}
 // ════════════════════════════════════════
 //  STUDENTS
@@ -2777,7 +2791,7 @@ function renderLoans(){
   }).join('')||`<tr><td colspan="7"><div class="empty-state"><div class="eicon">🔄</div><h3>אין נתונים</h3></div></td></tr>`;
 }
 function loanTab(t,el){loanTabCur=t;document.querySelectorAll('#view-loans .tab-item').forEach(x=>x.classList.remove('active'));el.classList.add('active');const ttls={active:'פעילות',overdue:'באיחור',history:'היסטוריה'};document.getElementById('loan-tab-ttl').textContent=ttls[t];renderLoans();}
-function findStudent(v){v=v.trim().toLowerCase();return DB.students.find(s=>s.card.toLowerCase()===v||(s.first+' '+s.last).toLowerCase().includes(v)||v.includes(s.card.toLowerCase()));}
+function findStudent(v){v=v.trim().toLowerCase();if(!v)return null;return DB.students.find(s=>s.card.toLowerCase()===v||(s.first+' '+s.last).toLowerCase().includes(v)||v.includes(s.card.toLowerCase()));}
 function findCopy(bc){
   bc=bc.trim();
   if(!bc)return null;
@@ -2907,7 +2921,9 @@ function quickLoan(bookId){
   setTimeout(()=>document.getElementById('loan-s')?.focus(),150);
 }
 function doLoan(){
-  const student=findStudent(document.getElementById('loan-s').value);if(!student){showFB('תלמיד לא נמצא','warning');return;}
+  const sVal=document.getElementById('loan-s').value;
+  if(!sVal.trim()){showFB('נא להזין שם תלמיד/ה','warning');document.getElementById('loan-s').focus();return;}
+  const student=findStudent(sVal);if(!student){showFB('תלמיד לא נמצא','warning');document.getElementById('loan-s').focus();return;}
   const al=DB.loans.filter(l=>(l.status==='active'||l.status==='overdue')&&l.studentId===student.id).length;
   if(al>=(DB.settings.maxBooks||3)){showFB(`${student.first} כבר שאל/ה ${al} ספרים`,'warning');return;}
   const found=findCopy(document.getElementById('loan-b').value);if(!found){showFB('ברקוד לא נמצא','warning');return;}
@@ -4432,8 +4448,11 @@ function updateAdminUI(){
   if(btn)btn.style.color=isAdmin?'#7fff9a':'rgba(255,255,255,.6)';
   document.querySelectorAll('.admin-only').forEach(el=>{
     if(isAdmin){
-      // checkboxes need 'inline-block', others get ''
-      el.style.display=el.tagName==='INPUT'?'inline-block':'';
+      // .admin-only{display:none} and .btn{display:inline-flex} have equal
+      // CSS specificity, and .admin-only is declared later in the
+      // stylesheet, so clearing the inline style to '' never actually
+      // overrides it — an explicit value is required to reveal the element.
+      el.style.display=el.tagName==='INPUT'?'inline-block':'inline-flex';
     }else{
       el.style.display='none';
     }
