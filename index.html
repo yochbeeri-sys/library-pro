@@ -4585,10 +4585,19 @@ async function librarianSignInGoogle(){
     await fbAuth.signInWithPopup(provider);
     msg.style.color='var(--green)';msg.textContent='✅ התחברת עם Google!';
     setTimeout(()=>{
-      if(isLibrarianVerified||isAdminVerified)closeModal('modal-librarian');
+      if(isLibrarianVerified){closeModal('modal-librarian');logLibrarianLogin();}
+      else if(isAdminVerified){closeModal('modal-librarian');}
       else{msg.style.color='var(--red)';msg.textContent='החשבון הזה לא הוזמן כספרן/ית. פני למנהל/ת המערכת.';}
     },800);
   }catch(e){msg.style.color='var(--red)';msg.textContent='שגיאה: '+e.message;}
+}
+function logLibrarianLogin(){
+  if(!currentLibRef||!currentAdmin)return;
+  currentLibRef.child('librarianLogins').push({
+    email:currentAdmin.email||'',
+    name:currentLibrarianName||'',
+    time:Date.now()
+  });
 }
 
 function libSignOut(){
@@ -4668,6 +4677,32 @@ async function removeLibrarianInvite(key){
   if(!confirm('לבטל את ההזמנה?'))return;
   await currentLibRef.child('librarianInvites/'+key).remove();
   renderLibrarianList();
+}
+
+function openLibrarianHistory(){
+  renderLibrarianHistory();
+  openModal('modal-librarian-history');
+}
+async function renderLibrarianHistory(){
+  const el=document.getElementById('librarian-history-list');
+  if(!el)return;
+  if(!currentLibRef){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:10px;font-size:11px">אין ספרייה נבחרת</div>';return;}
+  el.innerHTML='<div style="color:var(--muted);text-align:center;padding:10px;font-size:11px">טוען...</div>';
+  try{
+    const snap=await currentLibRef.child('librarianLogins').limitToLast(100).once('value');
+    const val=snap.val()||{};
+    const entries=Object.values(val).sort((a,b)=>(b.time||0)-(a.time||0));
+    if(!entries.length){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:10px;font-size:11px">אין עדיין היסטוריית כניסות</div>';return;}
+    el.innerHTML=entries.map(e=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border-bottom:1px solid var(--surface2);font-size:12px">
+        <span style="font-size:14px">📚</span>
+        <div style="flex:1;overflow:hidden">
+          <div style="font-weight:700">${esc(e.name||e.email||'ספרן/ית')}</div>
+          <div style="font-size:10px;color:var(--muted);direction:ltr;text-align:right">${esc(e.email||'')}</div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);white-space:nowrap">${e.time?new Date(e.time).toLocaleString('he-IL'):''}</div>
+      </div>`).join('');
+  }catch(err){el.innerHTML='<div style="color:var(--red);font-size:11px;padding:10px">שגיאה: '+err.message+'</div>';}
 }
 
 // ── Admin list rendering ──
@@ -5393,6 +5428,7 @@ function biDoImport(){
           <div style="font-size:9px;color:var(--muted);margin-top:6px;line-height:1.5">
             💡 הספרנ/ית צריכ/ה להתחבר עם Google (מכפתור "כניסת ספרנ/ית") כדי שהחשבון שלה/ו יירשם במערכת
           </div>
+          <button class="btn btn-sm btn-ghost" style="width:100%;justify-content:center;margin-top:8px" onclick="openLibrarianHistory()">📜 היסטוריית כניסות</button>
         </div>
 
         <button class="btn btn-danger btn-sm" style="width:100%;justify-content:center" onclick="adminSignOut()">🔓 התנתק</button>
@@ -5479,6 +5515,19 @@ function biDoImport(){
         <div id="lib-user-name" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
         <button class="btn btn-danger btn-sm" style="margin-top:16px;width:100%" onclick="libSignOut()">🔓 התנתק</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Librarian login history -->
+<div class="modal-overlay" id="modal-librarian-history">
+  <div class="modal" style="width:min(460px,96vw)">
+    <div class="modal-header">
+      <h3>📜 היסטוריית כניסות ספרנים</h3>
+      <button class="modal-close" onclick="closeModal('modal-librarian-history')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="librarian-history-list" style="max-height:360px;overflow-y:auto"></div>
     </div>
   </div>
 </div>
