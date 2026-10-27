@@ -1006,7 +1006,11 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
               <div class="field"><label>לוגו</label><div class="logo-upload-area"><input type="file" accept="image/*" onchange="loadLogo(event)"><div id="logo-disp"><div style="font-size:20px;margin-bottom:2px">🖼</div><div style="font-size:10px;color:var(--muted)">לחץ לבחירת לוגו</div></div></div></div>
               <div class="cols2">
                 <div class="field"><label>ימי השאלה</label><input type="number" id="set-days" value="14" min="1" max="60" onchange="saveSettings()"></div>
-                <div class="field"><label>מקסימום ספרים</label><input type="number" id="set-max" value="3" min="1" max="10" onchange="saveSettings()"></div>
+                <div class="field"><label>מקסימום ספרים (תלמיד רגיל)</label><input type="number" id="set-max" value="3" min="1" max="20" onchange="saveSettings()"></div>
+              </div>
+              <div class="cols2">
+                <div class="field"><label>מקסימום ספרים (עוזר/ת ספרייה)</label><input type="number" id="set-max-helper" value="5" min="1" max="20" onchange="saveSettings()"></div>
+                <div class="field"><label>מקסימום ספרים (מורה / צוות)</label><input type="number" id="set-max-teacher" value="6" min="1" max="20" onchange="saveSettings()"></div>
               </div>
               <div class="field"><label>קוד גישה חדש (4 ספרות)</label><input type="number" id="set-pin" placeholder="השאר ריק לאין שינוי" min="1000" max="9999"></div>
               <button class="btn btn-primary btn-sm" onclick="saveSettingsManual()">שמור הגדרות</button>
@@ -1237,6 +1241,12 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
           👩‍🏫 מורה / צוות
         </label>
       </div>
+    </div>
+    <div class="field" id="ms-helper-wrap" style="margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:7px;padding:8px 12px;border:2px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">
+        <input type="checkbox" id="ms-helper" style="accent-color:var(--purple)">
+        📚 עוזר/ת ספרייה (הרשאת השאלה מורחבת)
+      </label>
     </div>
     <div class="cols2">
       <div class="field"><label>שם פרטי</label><input type="text" id="ms-first"></div>
@@ -1530,7 +1540,7 @@ const FB_CONFIG = {
 let fbApp = null, fbDb = null, fbAuth = null;
 let currentAdmin = null; // Firebase auth user when admin is logged in
 let currentLibId=null, currentLibRef=null;
-let DB={books:[],students:[],loans:[],reservations:[],actLog:[],settings:{school:'',loanDays:14,maxBooks:3,logo:null},_ids:{book:100,student:1000,loan:1,res:1}};
+let DB={books:[],students:[],loans:[],reservations:[],actLog:[],settings:{school:'',loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},_ids:{book:100,student:1000,loan:1,res:1}};
 let unsubscribe=null;
 // ═══ ALL STATE VARS UP TOP (prevents TDZ errors) ═══
 let libraries=[];
@@ -1585,7 +1595,7 @@ function createLibrary(){
   if(!name||!pin||pin.length!==4||isNaN(pin)){alert('נא למלא שם וקוד גישה (4 ספרות)');return;}
   const id='lib_'+Date.now();
   const meta={name,school,color:nlColor,icon:nlIcon,pin};
-  const emptyData={books:{},students:{},loans:{},reservations:{},actLog:[],settings:{school:school||name,loanDays:14,maxBooks:3,logo:null},_ids:{book:100,student:1000,loan:1,res:1}};
+  const emptyData={books:{},students:{},loans:{},reservations:{},actLog:[],settings:{school:school||name,loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},_ids:{book:100,student:1000,loan:1,res:1}};
   fbDb.ref('libraries/'+id).set({meta,data:emptyData}).then(()=>{
     libraries.push({id,...meta});
     backToLibList();
@@ -1641,7 +1651,7 @@ function enterLibrary(id){
       loans:fbArrToArr(val.loans),
       reservations:fbArrToArr(val.reservations),
       actLog:Array.isArray(val.actLog)?val.actLog:(val.actLog?Object.values(val.actLog):[]),
-      settings:val.settings||{school:'',loanDays:14,maxBooks:3,logo:null},
+      settings:val.settings||{school:'',loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},
       _ids:val._ids||{book:100,student:1000,loan:1,res:1}
     };
     // Migrate old class format ("ג1" → "כיתה ג1") and save
@@ -1744,6 +1754,8 @@ function refreshCurrentView(){
     document.getElementById('set-school').value=DB.settings.school||'';
     document.getElementById('set-days').value=DB.settings.loanDays||14;
     document.getElementById('set-max').value=DB.settings.maxBooks||3;
+    document.getElementById('set-max-helper').value=DB.settings.maxBooksHelper||5;
+    document.getElementById('set-max-teacher').value=DB.settings.maxBooksTeacher||6;
     if(DB.settings.logo)document.getElementById('logo-disp').innerHTML=`<img src="${DB.settings.logo}" style="max-height:40px;display:block;margin:0 auto 2px"><div style="font-size:10px;color:var(--muted)">לחץ להחלפה</div>`;
     loadCustomGroups();
     renderGroupsList();
@@ -2195,7 +2207,7 @@ function renderStudents(){
     const isTeacher=(s.role||'student')==='teacher';
     const roleBadge=isTeacher
       ?`<span class="badge" style="background:#e8f9ef;color:var(--green);font-size:9px;margin-right:4px">👩‍🏫 ${esc(s.roleText||'מורה')}</span>`
-      :`<span class="badge badge-blue" style="font-size:9px">${esc(s.cls||'')}</span>`;
+      :`<span class="badge badge-blue" style="font-size:9px">${esc(s.cls||'')}</span>${s.isHelper?`<span class="badge" style="background:#f3e8fd;color:#8e44ad;font-size:9px;margin-right:4px">📚 עוזר/ת ספרייה</span>`:''}`;
     const avatar=isTeacher?'👩‍🏫':(s.first[0]||'?');
     const avatarBg=isTeacher?'#27ae60':cols[i%cols.length];
     const checked=bulkSelectedIds.has(s.id)?'checked':'';
@@ -2215,7 +2227,7 @@ function renderStudents(){
         <button class="btn btn-xs btn-ghost" onclick="showStudentDetail(${s.id})">פרופיל</button>
         <button class="btn btn-xs btn-ghost" onclick="editStudent(${s.id})">✏️</button>
         <button class="btn btn-xs" style="background:var(--accent);color:#fff" onclick="quickLoanStudent(${s.id})" title="השאל ספר">📤</button>
-        <button class="btn btn-xs btn-danger" onclick="delStudent(${s.id})">🗑</button>
+        <button class="btn btn-xs btn-danger admin-only" onclick="delStudent(${s.id})" title="מחק תלמיד/ה (מנהל בלבד)">🗑</button>
       </div></td>
     </tr>`;
   }).join('')||`<tr><td colspan="7"><div class="empty-state"><div class="eicon">👥</div><h3>אין משאילים</h3></div></td></tr>`;
@@ -2327,6 +2339,7 @@ function msRoleChange(){
   document.getElementById('ms-role-txt').style.display=isTeacher?'':'none';
   document.getElementById('ms-cls-label').textContent=isTeacher?'תפקיד / מקצוע':'כיתה';
   document.getElementById('ms-phone-wrap').style.display=isTeacher?'':'none';
+  document.getElementById('ms-helper-wrap').style.display=isTeacher?'none':'';
   // Highlight selected
   document.getElementById('ms-role-student-lbl').style.borderColor=isTeacher?'var(--border)':'var(--blue)';
   document.getElementById('ms-role-teacher-lbl').style.borderColor=isTeacher?'var(--green)':'var(--border)';
@@ -2335,6 +2348,7 @@ function openAddStudent(defaultRole='student'){
   editingStudentId=null;
   ['ms-first','ms-last','ms-phone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('ms-card').value='';
+  document.getElementById('ms-helper').checked=false;
   document.getElementById('ms-title-h').textContent='👤 הוסף משאיל';
   // Set role
   document.getElementById('ms-role-teacher').checked=defaultRole==='teacher';
@@ -2356,6 +2370,7 @@ function editStudent(id){
   msRoleChange();
   if(isTeacher){document.getElementById('ms-role-txt').value=s.roleText||'';}
   else{document.getElementById('ms-cls').value=s.cls||'כיתה א1';}
+  document.getElementById('ms-helper').checked=!!s.isHelper;
   const phEl=document.getElementById('ms-phone');if(phEl)phEl.value=s.phone||'';
   openModal('modal-student');
 }
@@ -2368,14 +2383,15 @@ function saveStudent(){
   const cls=isTeacher?'צוות':document.getElementById('ms-cls').value;
   const roleText=isTeacher?(document.getElementById('ms-role-txt').value.trim()||'מורה'):'';
   const phone=(document.getElementById('ms-phone')?.value||'').trim();
+  const isHelper=!isTeacher&&document.getElementById('ms-helper').checked;
   if(editingStudentId){
     const s=DB.students.find(x=>x.id===editingStudentId);
-    s.first=first;s.last=last;s.cls=cls;s.role=role;s.roleText=roleText;
+    s.first=first;s.last=last;s.cls=cls;s.role=role;s.roleText=roleText;s.isHelper=isHelper;
     if(phone)s.phone=phone;
   }else{
     DB._ids.student++;
     const prefix=isTeacher?'T':'S';
-    DB.students.push({id:DB._ids.student,first,last,cls,role,roleText,phone,
+    DB.students.push({id:DB._ids.student,first,last,cls,role,roleText,phone,isHelper,
       card:prefix+DB._ids.student,debt:0});
     addAct(`${isTeacher?'מורה/צוות':'תלמיד'} חדש: ${first} ${last}`,isTeacher?'#27ae60':'#2980b9');
   }
@@ -2459,7 +2475,20 @@ function importStudentsExcel(event){
   reader.readAsArrayBuffer(file);
 }
 
-function delStudent(id){if(!confirm('מחק תלמיד?'))return;DB.students=DB.students.filter(s=>s.id!==id);saveDB();}
+function delStudent(id){
+  const student=DB.students.find(s=>s.id===id);if(!student)return;
+  if(DB.loans.some(l=>l.studentId===id&&(l.status==='active'||l.status==='overdue'))){
+    alert('לא ניתן למחוק תלמיד/ה שיש לו/ה ספרים מושאלים כרגע. יש להחזיר את כל הספרים תחילה.');
+    return;
+  }
+  if(!confirm(`למחוק את ${student.first} ${student.last} מרשימת התלמידים?`))return;
+  DB.students=DB.students.filter(s=>s.id!==id);
+  DB.reservations=DB.reservations.filter(r=>r.studentId!==id);
+  bulkSelectedIds.delete(id);
+  addAct(`${student.first} ${student.last} נמחק/ה מרשימת התלמידים`,'#c0392b');
+  renderStudents();renderRes();
+  saveDB();
+}
 function showStudentDetail(id){
   const s=DB.students.find(x=>x.id===id);if(!s)return;
   const loans=DB.loans.filter(l=>l.studentId===id);
@@ -2920,12 +2949,19 @@ function quickLoan(bookId){
   // Focus student field
   setTimeout(()=>document.getElementById('loan-s')?.focus(),150);
 }
+function getStudentMaxBooks(student){
+  const role=student.role||'student';
+  if(role==='teacher')return DB.settings.maxBooksTeacher||6;
+  if(student.isHelper)return DB.settings.maxBooksHelper||5;
+  return DB.settings.maxBooks||3;
+}
 function doLoan(){
   const sVal=document.getElementById('loan-s').value;
   if(!sVal.trim()){showFB('נא להזין שם תלמיד/ה','warning');document.getElementById('loan-s').focus();return;}
   const student=findStudent(sVal);if(!student){showFB('תלמיד לא נמצא','warning');document.getElementById('loan-s').focus();return;}
   const al=DB.loans.filter(l=>(l.status==='active'||l.status==='overdue')&&l.studentId===student.id).length;
-  if(al>=(DB.settings.maxBooks||3)){showFB(`${student.first} כבר שאל/ה ${al} ספרים`,'warning');return;}
+  const maxForStudent=getStudentMaxBooks(student);
+  if(al>=maxForStudent){showFB(`${student.first} כבר שאל/ה ${al} ספרים (מקסימום ${maxForStudent})`,'warning');return;}
   const found=findCopy(document.getElementById('loan-b').value);if(!found){showFB('ברקוד לא נמצא','warning');return;}
   const{book,copy}=found;if(copy.status!=='available'){showFB(`עותק "${book.title}" אינו זמין`,'warning');return;}
   copy.status='loaned';
@@ -3572,7 +3608,7 @@ function refreshGroupChips(){
   initGroupGrid('lbl-grp-grid',GROUPS[0]);
 }
 
-function saveSettings(){if(!DB||!currentLibId)return;DB.settings.school=document.getElementById('set-school').value;DB.settings.loanDays=parseInt(document.getElementById('set-days').value)||14;DB.settings.maxBooks=parseInt(document.getElementById('set-max').value)||3;document.getElementById('sb-school-name').textContent=DB.settings.school;saveDB();}
+function saveSettings(){if(!DB||!currentLibId)return;DB.settings.school=document.getElementById('set-school').value;DB.settings.loanDays=parseInt(document.getElementById('set-days').value)||14;DB.settings.maxBooks=parseInt(document.getElementById('set-max').value)||3;DB.settings.maxBooksHelper=parseInt(document.getElementById('set-max-helper').value)||5;DB.settings.maxBooksTeacher=parseInt(document.getElementById('set-max-teacher').value)||6;document.getElementById('sb-school-name').textContent=DB.settings.school;saveDB();}
 function saveSettingsManual(){saveSettings();const np=document.getElementById('set-pin').value.trim();if(np&&np.length===4&&!isNaN(np)){const lib=libraries.find(l=>l.id===currentLibId);if(lib){lib.pin=np;fbDb.ref('libraries/'+currentLibId+'/meta/pin').set(np);document.getElementById('set-pin').value='';}}alert('הגדרות נשמרו בענן ✓');}
 function loadLogo(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{DB.settings.logo=ev.target.result;saveDB();document.getElementById('logo-disp').innerHTML=`<img src="${DB.settings.logo}" style="max-height:40px;display:block;margin:0 auto 2px"><div style="font-size:10px;color:var(--muted)">לחץ להחלפה</div>`;};r.readAsDataURL(f);}
 function exportData(){const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='library_backup.json';a.click();}
@@ -4208,7 +4244,7 @@ async function adminSignIn(){
     msg.textContent='✅ התחברת בהצלחה!';msg.style.color='var(--green)';
     setTimeout(()=>closeModal('modal-admin'),800);
   }catch(e){
-    const errs={'auth/wrong-password':'סיסמה שגויה','auth/user-not-found':'אימייל לא נמצא','auth/invalid-email':'אימייל לא תקין','auth/too-many-requests':'יותר מדי ניסיונות — נסי מאוחר יותר'};
+    const errs={'auth/wrong-password':'סיסמה שגויה','auth/user-not-found':'אימייל לא נמצא','auth/invalid-email':'אימייל לא תקין','auth/too-many-requests':'יותר מדי ניסיונות — נסי מאוחר יותר','auth/invalid-credential':'אימייל או סיסמה שגויים — אם נרשמת עם Google, השתמשי בכפתור "כניסה עם Google" במקום'};
     msg.textContent=errs[e.code]||e.message;msg.style.color='var(--red)';
   }finally{btn.disabled=false;btn.textContent='🔑 כניסה';}
 }
