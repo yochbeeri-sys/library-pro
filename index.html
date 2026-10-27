@@ -1695,6 +1695,7 @@ function enterLibrary(id){
   currentLibId=id;
   currentLibRef=fbDb.ref('libraries/'+id+'/data');
   const lib=libraries.find(l=>l.id===id);
+  if(currentAdmin)checkLibrarianStatus(currentAdmin);
 
   if(unsubscribe){unsubscribe();}
   currentLibRef.on('value',snap=>{
@@ -4421,6 +4422,7 @@ function initFirebase(){
     fbAuth.onAuthStateChanged(user => {
       currentAdmin = user;
       checkAdminStatus(user);
+      if(currentLibRef)checkLibrarianStatus(user);
     });
 
     // Try anonymous sign-in in background (non-blocking)
@@ -4571,38 +4573,26 @@ function openLibrarianModal(){
   }else{
     document.getElementById('librarian-modal-login').style.display='';
     document.getElementById('librarian-modal-info').style.display='none';
-    document.getElementById('lib-login-name').value='';
-    document.getElementById('lib-login-pass').value='';
     document.getElementById('lib-login-msg').textContent='';
   }
   openModal('modal-librarian');
-  setTimeout(()=>document.getElementById('lib-login-name')?.focus(),200);
 }
 
-async function libLogin(){
-  const name=document.getElementById('lib-login-name').value.trim();
-  const pass=document.getElementById('lib-login-pass').value;
+async function librarianSignInGoogle(){
   const msg=document.getElementById('lib-login-msg');
-  if(!name||!pass){msg.textContent='נא למלא שם וסיסמה';return;}
   try{
-    const snap=await currentLibRef.child('librarians').once('value');
-    const libs=snap.val()||{};
-    const entry=Object.values(libs).find(l=>l.name===name);
-    if(!entry){msg.textContent='שם לא נמצא';return;}
-    // Simple hash comparison
-    const hashed=await hashPass(pass);
-    if(entry.passHash!==hashed){msg.textContent='סיסמה שגויה';return;}
-    isLibrarianVerified=true;
-    currentLibrarianName=name;
-    updateLibrarianUI();
-    closeModal('modal-librarian');
-  }catch(e){msg.textContent='שגיאה: '+e.message;}
+    const provider=new firebase.auth.GoogleAuthProvider();
+    await fbAuth.signInWithPopup(provider);
+    msg.style.color='var(--green)';msg.textContent='✅ התחברת עם Google!';
+    setTimeout(()=>{
+      if(isLibrarianVerified||isAdminVerified)closeModal('modal-librarian');
+      else{msg.style.color='var(--red)';msg.textContent='החשבון הזה לא הוזמן כספרן/ית. פני למנהל/ת המערכת.';}
+    },800);
+  }catch(e){msg.style.color='var(--red)';msg.textContent='שגיאה: '+e.message;}
 }
 
 function libSignOut(){
-  isLibrarianVerified=false;
-  currentLibrarianName='';
-  updateLibrarianUI();
+  adminSignOut();
   closeModal('modal-librarian');
 }
 
@@ -4619,26 +4609,21 @@ function updateLibrarianUI(){
     el.style.display=(isAdminVerified||isLibrarianVerified)?'':'none');
 }
 
-async function hashPass(pass){
-  const enc=new TextEncoder().encode(pass+'lpro_salt_2024');
-  const buf=await crypto.subtle.digest('SHA-256',enc);
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-
-// Add librarian from admin panel
-async function addLibrarian(){
-  const name=document.getElementById('new-lib-name').value.trim();
-  const pass=document.getElementById('new-lib-pass').value;
+// Invite a librarian by email from the admin panel (per-library, email-based like admins)
+async function addLibrarianByEmail(){
+  const emailEl=document.getElementById('new-lib-email');
   const msg=document.getElementById('librarian-add-msg');
-  if(!name||!pass){msg.textContent='נא למלא שם וסיסמה';msg.style.color='var(--red)';return;}
-  if(pass.length<4){msg.textContent='סיסמה לפחות 4 תווים';msg.style.color='var(--red)';return;}
+  const email=emailEl.value.trim().toLowerCase();
+  if(!email){msg.textContent='הכנס אימייל';msg.style.color='var(--red)';return;}
+  if(!email.includes('@')){msg.textContent='אימייל לא תקין';msg.style.color='var(--red)';return;}
+  if(!currentLibRef){msg.textContent='שגיאה: לא נבחרה ספרייה';msg.style.color='var(--red)';return;}
   try{
-    const passHash=await hashPass(pass);
-    const id='lib_'+Date.now();
-    await currentLibRef.child('librarians/'+id).set({name,passHash,createdAt:Date.now()});
-    msg.textContent='✅ '+name+' נוסף/ה בהצלחה';msg.style.color='var(--green)';
-    document.getElementById('new-lib-name').value='';
-    document.getElementById('new-lib-pass').value='';
+    await currentLibRef.child('librarianInvites/'+email.replace(/\./g,'_')).set({
+      email,invitedBy:currentAdmin?.email||'',invitedAt:Date.now()
+    });
+    msg.textContent='✅ הזמנה נשמרה — '+email+' יקבל/תקבל הרשאות בכניסה הבאה';
+    msg.style.color='var(--green)';
+    emailEl.value='';
     renderLibrarianList();
     setTimeout(()=>msg.textContent='',3000);
   }catch(e){msg.textContent='שגיאה: '+e.message;msg.style.color='var(--red)';}
@@ -4646,25 +4631,42 @@ async function addLibrarian(){
 
 async function renderLibrarianList(){
   const el=document.getElementById('librarian-list');
-  if(!el)return;
+  if(!el||!currentLibRef)return;
   try{
-    const snap=await currentLibRef.child('librarians').once('value');
-    const libs=snap.val()||{};
-    const entries=Object.entries(libs);
-    if(!entries.length){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:6px;font-size:11px">אין ספרנים רשומים</div>';return;}
-    el.innerHTML=entries.map(([id,l])=>`
-      <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;background:#fff;margin-bottom:3px;border:1px solid var(--border)">
+    const [libSnap,inviteSnap]=await Promise.all([
+      currentLibRef.child('librarianEmails').once('value'),
+      currentLibRef.child('librarianInvites').once('value')
+    ]);
+    const libs=libSnap.val()||{};
+    const invites=inviteSnap.val()||{};
+    const libEntries=Object.entries(libs).map(([uid,email])=>
+      `<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;background:#fff;margin-bottom:3px;border:1px solid var(--border)">
         <span style="font-size:14px">📚</span>
-        <span style="flex:1;font-size:12px;font-weight:600">${esc(l.name)}</span>
-        <button onclick="removeLibrarian('${id}')"
+        <span style="flex:1;font-size:12px;font-weight:600;direction:ltr;text-align:right">${esc(email)}</span>
+        <button onclick="removeLibrarian('${uid}')"
           style="padding:2px 8px;border:none;border-radius:4px;background:var(--red);color:#fff;font-size:10px;cursor:pointer;font-family:Heebo,sans-serif">הסר</button>
-      </div>`).join('');
+      </div>`);
+    const inviteEntries=Object.entries(invites).map(([key,inv])=>
+      `<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;background:var(--surface2);margin-bottom:3px;border:1px dashed var(--border)">
+        <span style="font-size:14px">⏳</span>
+        <span style="flex:1;font-size:11px;color:var(--muted);direction:ltr;text-align:right">${esc(inv.email)} (ממתינ/ה לכניסה ראשונה)</span>
+        <button onclick="removeLibrarianInvite('${key}')"
+          style="padding:2px 8px;border:none;border-radius:4px;background:var(--red);color:#fff;font-size:10px;cursor:pointer;font-family:Heebo,sans-serif">בטל</button>
+      </div>`);
+    const all=[...libEntries,...inviteEntries];
+    el.innerHTML=all.length?all.join(''):'<div style="color:var(--muted);text-align:center;padding:6px;font-size:11px">אין ספרנים רשומים</div>';
   }catch(e){el.innerHTML='<div style="color:var(--red);font-size:10px">'+e.message+'</div>';}
 }
 
-async function removeLibrarian(id){
+async function removeLibrarian(uid){
   if(!confirm('הסר ספרנ/ית זה?'))return;
-  await currentLibRef.child('librarians/'+id).remove();
+  await currentLibRef.child('librarians/'+uid).remove();
+  await currentLibRef.child('librarianEmails/'+uid).remove();
+  renderLibrarianList();
+}
+async function removeLibrarianInvite(key){
+  if(!confirm('לבטל את ההזמנה?'))return;
+  await currentLibRef.child('librarianInvites/'+key).remove();
   renderLibrarianList();
 }
 
@@ -4755,6 +4757,35 @@ async function checkAdminStatus(user){
     }else{isAdminVerified=false;}
   }
   updateAdminUI();
+}
+
+// ── Librarian role: email-invite based, scoped per-library ──
+async function checkPendingLibrarianInvite(user){
+  if(!user?.email||!currentLibRef)return false;
+  const key=user.email.replace(/\./g,'_');
+  const snap=await currentLibRef.child('librarianInvites/'+key).once('value');
+  if(snap.exists()){
+    await currentLibRef.child('librarians/'+user.uid).set(true);
+    await currentLibRef.child('librarianEmails/'+user.uid).set(user.email);
+    await currentLibRef.child('librarianInvites/'+key).remove();
+    return true;
+  }
+  return false;
+}
+async function checkLibrarianStatus(user){
+  if(!user||!currentLibRef){isLibrarianVerified=false;updateLibrarianUI();return;}
+  const wasInvited=await checkPendingLibrarianInvite(user);
+  if(wasInvited){
+    isLibrarianVerified=true;
+    currentLibrarianName=user.displayName||user.email||'ספרן/ית';
+    updateLibrarianUI();return;
+  }
+  try{
+    const snap=await currentLibRef.child('librarians/'+user.uid).once('value');
+    isLibrarianVerified=snap.exists()&&snap.val()===true;
+    if(isLibrarianVerified)currentLibrarianName=user.displayName||user.email||'ספרן/ית';
+  }catch(e){isLibrarianVerified=false;}
+  updateLibrarianUI();
 }
 
 function updateAdminUI(){
@@ -5353,18 +5384,15 @@ function biDoImport(){
         <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:12px">
           <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px">📚 ניהול ספרנים</div>
           <div id="librarian-list" style="max-height:100px;overflow-y:auto;margin-bottom:8px;font-size:11px"></div>
-          <div class="cols2" style="gap:6px;margin-bottom:6px">
-            <div class="field" style="margin:0"><label style="font-size:10px">שם ספרנ/ית</label>
-              <input type="text" id="new-lib-name" placeholder="שם מלא"
-                style="padding:5px 8px;border:1.5px solid var(--border);border-radius:5px;font-size:11px">
-            </div>
-            <div class="field" style="margin:0"><label style="font-size:10px">סיסמה</label>
-              <input type="password" id="new-lib-pass" placeholder="סיסמה"
-                style="padding:5px 8px;border:1.5px solid var(--border);border-radius:5px;font-size:11px">
-            </div>
+          <div class="field" style="margin:0 0 6px"><label style="font-size:10px">אימייל ספרנ/ית חדש/ה</label>
+            <input type="email" id="new-lib-email" placeholder="librarian@school.co.il"
+              style="padding:5px 8px;border:1.5px solid var(--border);border-radius:5px;font-size:11px">
           </div>
-          <button class="btn btn-sm btn-primary" style="width:100%" onclick="addLibrarian()">+ הוסף ספרנ/ית</button>
+          <button class="btn btn-sm btn-primary" style="width:100%" onclick="addLibrarianByEmail()">+ הזמן ספרנ/ית</button>
           <div id="librarian-add-msg" style="font-size:10px;min-height:14px;margin-top:4px;text-align:center"></div>
+          <div style="font-size:9px;color:var(--muted);margin-top:6px;line-height:1.5">
+            💡 הספרנ/ית צריכ/ה להתחבר עם Google (מכפתור "כניסת ספרנ/ית") כדי שהחשבון שלה/ו יירשם במערכת
+          </div>
         </div>
 
         <button class="btn btn-danger btn-sm" style="width:100%;justify-content:center" onclick="adminSignOut()">🔓 התנתק</button>
@@ -5434,16 +5462,16 @@ function biDoImport(){
     </div>
     <div class="modal-body">
       <div id="librarian-modal-login">
-        <div class="field"><label>שם ספרנ/ית</label>
-          <input type="text" id="lib-login-name" placeholder="שם מלא"
-            onkeydown="if(event.key==='Enter')document.getElementById('lib-login-pass').focus()">
-        </div>
-        <div class="field"><label>סיסמה</label>
-          <input type="password" id="lib-login-pass" placeholder="••••••••"
-            onkeydown="if(event.key==='Enter')libLogin()">
-        </div>
-        <div id="lib-login-msg" style="font-size:11px;color:var(--red);min-height:16px;text-align:center;margin-bottom:8px"></div>
-        <button class="btn btn-primary" style="width:100%" onclick="libLogin()">🔑 כניסה</button>
+        <p style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:12px">
+          הכניסה היא עם חשבון Google שהמנהל/ת הזמין/ה לתפקיד ספרן/ית
+        </p>
+        <button onclick="librarianSignInGoogle()"
+          style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 16px;border:1.5px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:'Heebo',sans-serif;transition:all .15s"
+          onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='#fff'">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:18px;height:18px">
+          כניסה עם Google
+        </button>
+        <div id="lib-login-msg" style="font-size:11px;color:var(--red);min-height:16px;text-align:center;margin-top:10px"></div>
       </div>
       <div id="librarian-modal-info" style="display:none;text-align:center">
         <div style="font-size:26px;margin-bottom:8px">📚</div>
