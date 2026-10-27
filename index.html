@@ -739,9 +739,9 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
             <div id="grp-filters"></div>
             <div style="margin-right:auto;display:flex;gap:6px">
               <button class="btn btn-sm btn-teal librarian-only" style="display:none" onclick="openBulkImport()">📥 ייבוא מאסיבי</button>
-          <button class="btn btn-sm btn-ghost librarian-only admin-only" style="display:none" onclick="openFindReplace()">🔄 חיפוש והחלפה</button>
+          <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="openFindReplace()">🔄 חיפוש והחלפה</button>
               <button class="btn btn-sm btn-ghost" onclick="exportBooks()">⬇ ייצוא</button>
-              <button class="btn btn-sm btn-primary admin-only" onclick="openAddBookModal()">+ ספר</button>
+              <button class="btn btn-sm btn-primary admin-only librarian-only" onclick="openAddBookModal()">+ ספר</button>
             </div>
           </div>
           <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-end">
@@ -820,12 +820,12 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
           <div class="filter-chip" onclick="fStudentsRole('teacher',this)" id="sf-teacher">👩‍🏫 מורים / צוות</div>
           <div id="cls-filters"></div>
           <input type="text" id="ssearch" placeholder="חיפוש..." oninput="fStudentsText(this.value)" style="padding:4px 9px;border:1.5px solid var(--border);border-radius:20px;font-size:11px;direction:rtl;background:#fff;margin-right:auto;width:170px">
-          <button class="btn btn-sm btn-ghost librarian-only" style="display:none" onclick="document.getElementById('xl-import').click()" title="ייבוא מאקסל">📥 ייבוא מאקסל</button>
+          <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="document.getElementById('xl-import').click()" title="ייבוא מאקסל">📥 ייבוא מאקסל</button>
           <button class="btn btn-sm btn-ghost admin-only" onclick="openStudentSync()" title="עדכון רשימה מטבלה">🔄 עדכון רשימה</button>
           <input type="file" id="xl-import" accept=".xlsx,.xls,.csv" style="display:none" onchange="importStudentsExcel(event)">
           <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="openPromoteModal()" title="העלאת שכבה לכל בית הספר">🎓 העלאת שכבה</button>
-          <button class="btn btn-sm btn-ghost librarian-only" style="display:none" onclick="openAddStudent('teacher')">+ מורה / צוות</button>
-          <button class="btn btn-sm btn-primary librarian-only" style="display:none" onclick="openAddStudent('student')">+ תלמיד</button>
+          <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="openAddStudent('teacher')">+ מורה / צוות</button>
+          <button class="btn btn-sm btn-primary admin-only" style="display:none" onclick="openAddStudent('student')">+ תלמיד</button>
         </div>
 
         <!-- Bulk selection action bar -->
@@ -1384,7 +1384,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
       <div class="table-wrap" id="asr-results" style="max-height:340px;overflow-y:auto"></div>
     </div>
     <div class="modal-footer" style="justify-content:space-between">
-      <button class="btn btn-ghost btn-sm librarian-only" style="display:none" onclick="closeModal('modal-advsearch');openFindReplace()">🔄 חיפוש והחלפה גורפת</button>
+      <button class="btn btn-ghost btn-sm admin-only" style="display:none" onclick="closeModal('modal-advsearch');openFindReplace()">🔄 חיפוש והחלפה גורפת</button>
       <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-advsearch')">סגור</button>
     </div>
   </div>
@@ -2736,7 +2736,7 @@ function dlExcel(rows,filename,sheetName){
 //  BULK FIND & REPLACE
 // ════════════════════════════════════════
 function openFindReplace(){
-  if(!isAdminVerified&&!isLibrarianVerified){alert('יש להיכנס תחילה');return;}
+  if(!isAdminVerified){alert('פעולה זו זמינה למנהל/ת בלבד');return;}
   document.getElementById('fr-find').value='';
   document.getElementById('fr-replace').value='';
   document.getElementById('fr-preview').style.display='none';
@@ -4613,9 +4613,12 @@ function updateLibrarianUI(){
   if(icon)icon.textContent=isLibrarianVerified?'🟢':'📚';
   if(label)label.textContent=isLibrarianVerified?currentLibrarianName:'כניסת ספרנ/ית';
   if(btn)btn.style.color=isLibrarianVerified?'#7fff9a':'rgba(255,255,255,.5)';
-  // Show book-add/edit buttons for librarians and admins
+  // Show book-add buttons for librarians and admins. Some of these elements
+  // also carry .admin-only (e.g. "+ ספר"), which sets display:none and wins
+  // the CSS cascade over .btn{display:inline-flex} regardless of inline
+  // style — so revealing needs an explicit value, not ''.
   document.querySelectorAll('.librarian-only').forEach(el=>
-    el.style.display=(isAdminVerified||isLibrarianVerified)?'':'none');
+    el.style.display=(isAdminVerified||isLibrarianVerified)?'inline-flex':'none');
 }
 
 // Invite a librarian by email from the admin panel (per-library, email-based like admins)
