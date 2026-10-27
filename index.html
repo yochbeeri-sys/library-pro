@@ -348,6 +348,14 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
 @media screen{#print-sheet{display:none}}
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
+/* ═══ STUDENT PICKER (loans view) ═══ */
+.loan-s-picker{display:none;position:absolute;top:100%;right:0;left:0;z-index:50;background:#fff;border:1.5px solid var(--border);border-radius:8px;margin-top:4px;max-height:240px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.loan-s-picker.open{display:block}
+.loan-s-picker-item{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--surface2);color:var(--text)}
+.loan-s-picker-item:last-child{border-bottom:none}
+.loan-s-picker-item:hover,.loan-s-picker-item.active{background:var(--surface2)}
+.loan-s-picker-empty{padding:12px;text-align:center;font-size:11px;color:var(--muted)}
+
 /* ═══ ADVANCED SEARCH ═══ */
 .adv-search-btn{display:flex;align-items:center;gap:5px;padding:6px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;background:#fff;color:var(--navy);transition:all .15s;font-family:'Heebo',sans-serif}
 .adv-search-btn:hover{background:var(--navy);color:#fff;border-color:var(--navy)}
@@ -688,7 +696,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
         <div class="quick-bar" style="flex-direction:column;gap:10px;align-items:stretch">
           <!-- שורה 1: שדות קלט -->
           <div style="display:flex;gap:11px;align-items:flex-end">
-            <div class="field" style="flex:1;margin:0"><label>תלמיד</label><div style="display:flex;gap:6px"><input type="text" id="loan-s" placeholder="שם / כרטיס..." list="sl"><datalist id="sl"></datalist><button class="btn btn-teal btn-sm" onclick="openScan('loan-s')" style="font-size:15px;padding:6px 9px">📷</button></div></div>
+            <div class="field" style="flex:1;margin:0;position:relative"><label>תלמיד</label><div style="display:flex;gap:6px"><input type="text" id="loan-s" placeholder="שם / כרטיס..." autocomplete="off" oninput="filterStudentPicker(this.value)" onfocus="openStudentPicker()" onkeydown="studentPickerKeydown(event)"><datalist id="sl"></datalist><button class="btn btn-teal btn-sm" onclick="openScan('loan-s')" style="font-size:15px;padding:6px 9px">📷</button></div><div id="loan-s-picker" class="loan-s-picker"></div></div>
             <div class="field" style="flex:1;margin:0"><label>ספר (ברקוד)</label><div style="display:flex;gap:6px"><input type="text" id="loan-b" placeholder="סרוק..." oninput="loanBookPreview(this.value)" onkeydown="if(event.key==='Enter')doLoan()"><button class="btn btn-teal btn-sm" onclick="openScan('loan-b')" style="font-size:15px;padding:6px 9px">📷</button></div></div>
           </div>
           <!-- שורה 2: תצוגת ספר + כפתורים -->
@@ -2821,6 +2829,68 @@ function renderLoans(){
 }
 function loanTab(t,el){loanTabCur=t;document.querySelectorAll('#view-loans .tab-item').forEach(x=>x.classList.remove('active'));el.classList.add('active');const ttls={active:'פעילות',overdue:'באיחור',history:'היסטוריה'};document.getElementById('loan-tab-ttl').textContent=ttls[t];renderLoans();}
 function findStudent(v){v=v.trim().toLowerCase();if(!v)return null;return DB.students.find(s=>s.card.toLowerCase()===v||(s.first+' '+s.last).toLowerCase().includes(v)||v.includes(s.card.toLowerCase()));}
+// ── Student picker dropdown (loans view) ──────────────────────────
+let loanPickerActive=false,loanPickerIndex=-1;
+function getLoanPickerCandidates(filter){
+  const q=(filter||'').trim().toLowerCase();
+  let list=DB.students;
+  if(q)list=list.filter(s=>(s.first+' '+s.last).toLowerCase().includes(q)||s.card.toLowerCase().includes(q)||(s.cls||'').toLowerCase().includes(q));
+  return list.slice(0,30);
+}
+function renderStudentPicker(filter){
+  const el=document.getElementById('loan-s-picker');if(!el)return;
+  const list=getLoanPickerCandidates(filter);
+  loanPickerIndex=-1;
+  if(!list.length){el.innerHTML=`<div class="loan-s-picker-empty">לא נמצאו תלמידים</div>`;return;}
+  el.innerHTML=list.map(s=>{
+    const isTeacher=(s.role||'student')==='teacher';
+    const sub=isTeacher?(s.roleText||'מורה'):(s.cls||'');
+    return`<div class="loan-s-picker-item" data-id="${s.id}" onclick="selectStudentFromPicker(${s.id})">
+      <div style="width:24px;height:24px;border-radius:50%;background:${isTeacher?'#27ae60':'var(--blue)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0">${isTeacher?'👩‍🏫':esc(s.first[0]||'?')}</div>
+      <div style="flex:1;overflow:hidden">
+        <div style="font-weight:700">${esc(s.first+' '+s.last)}</div>
+        <div style="font-size:10px;color:var(--muted)">${esc(sub)} · ${esc(s.card)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function openStudentPicker(){
+  loanPickerActive=true;
+  document.getElementById('loan-s-picker')?.classList.add('open');
+  renderStudentPicker(document.getElementById('loan-s').value);
+}
+function closeStudentPicker(){
+  loanPickerActive=false;
+  document.getElementById('loan-s-picker')?.classList.remove('open');
+}
+function filterStudentPicker(val){
+  if(!loanPickerActive)openStudentPicker();else renderStudentPicker(val);
+}
+function selectStudentFromPicker(id){
+  const s=DB.students.find(x=>x.id===id);if(!s)return;
+  document.getElementById('loan-s').value=s.first+' '+s.last+' ('+s.card+')';
+  closeStudentPicker();
+  const bEl=document.getElementById('loan-b');
+  if(bEl&&!bEl.value.trim())bEl.focus();
+}
+function studentPickerUpdateActive(items){
+  items.forEach((it,i)=>it.classList.toggle('active',i===loanPickerIndex));
+  items[loanPickerIndex]?.scrollIntoView({block:'nearest'});
+}
+function studentPickerKeydown(event){
+  if(event.key==='Enter'&&!loanPickerActive){doLoan();return;}
+  const items=[...document.querySelectorAll('#loan-s-picker .loan-s-picker-item')];
+  if(event.key==='ArrowDown'){event.preventDefault();loanPickerIndex=Math.min(loanPickerIndex+1,items.length-1);studentPickerUpdateActive(items);}
+  else if(event.key==='ArrowUp'){event.preventDefault();loanPickerIndex=Math.max(loanPickerIndex-1,0);studentPickerUpdateActive(items);}
+  else if(event.key==='Enter'){
+    if(loanPickerIndex>=0&&items[loanPickerIndex]){event.preventDefault();selectStudentFromPicker(parseInt(items[loanPickerIndex].dataset.id));}
+    else{closeStudentPicker();doLoan();}
+  }else if(event.key==='Escape'){closeStudentPicker();}
+}
+document.addEventListener('click',e=>{
+  const wrap=document.getElementById('loan-s-picker'),input=document.getElementById('loan-s');
+  if(wrap&&input&&wrap.classList.contains('open')&&!wrap.contains(e.target)&&e.target!==input)closeStudentPicker();
+});
 function findCopy(bc){
   bc=bc.trim();
   if(!bc)return null;
@@ -2915,6 +2985,10 @@ function loanBookPreview(val){
     stEl.textContent='✅ זמין להשאלה';stEl.style.color='#aaffcc';
     btnL.disabled=false;btnL.style.opacity='1';btnL.style.cursor='pointer';
     btnR.disabled=true;btnR.style.opacity='.45';btnR.style.cursor='not-allowed';
+    // Book scanned and available — prompt for a student instead of leaving
+    // the field empty (previously that silently loaned to the first
+    // student in the list; see findStudent/doLoan).
+    if(!document.getElementById('loan-s').value.trim())openStudentPicker();
   } else if(loaned){
     stEl.textContent='🔄 מושאל — ניתן להחזיר';stEl.style.color='#ffe08a';
     btnL.disabled=true;btnL.style.opacity='.45';btnL.style.cursor='not-allowed';
