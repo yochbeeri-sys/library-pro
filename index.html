@@ -628,6 +628,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
       <div class="nav-item" onclick="showView('alerts',this)"><span class="icon">🔔</span>התראות איחור<span class="nav-badge" id="badge-alerts" style="display:none">0</span></div>
       <div class="sb-sec">כלים</div>
       <div class="nav-item" onclick="showView('labels',this)"><span class="icon">🏷️</span>מדבקות ברקוד</div>
+      <div class="nav-item" onclick="showView('roster',this)"><span class="icon">🗓️</span>תורנויות ספרנים</div>
       <div class="nav-item" onclick="showView('reports',this)"><span class="icon">📊</span>דוחות</div>
 
       <div class="nav-item" onclick="showView('settings',this)"><span class="icon">⚙️</span>הגדרות</div>
@@ -976,6 +977,19 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
             <div class="card"><div class="card-header"><div class="card-title" style="color:var(--orange)">⏳ מחזירים בקרוב</div></div>
               <div class="card-body" id="al-soon-list" style="padding:8px"></div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DUTY ROSTER (librarians) -->
+      <div class="view" id="view-roster">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🗓️ תורנויות ספרנים שבועיות</div>
+            <button class="btn btn-sm btn-primary admin-only" onclick="addRosterRow()">+ הוסף שורה</button>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div class="table-wrap"><table id="roster-table"></table></div>
           </div>
         </div>
       </div>
@@ -1581,7 +1595,7 @@ const FB_CONFIG = {
 let fbApp = null, fbDb = null, fbAuth = null;
 let currentAdmin = null; // Firebase auth user when admin is logged in
 let currentLibId=null, currentLibRef=null;
-let DB={books:[],students:[],loans:[],reservations:[],actLog:[],settings:{school:'',loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},_ids:{book:100,student:1000,loan:1,res:1}};
+let DB={books:[],students:[],loans:[],reservations:[],actLog:[],settings:{school:'',loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},dutyRoster:{rows:['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],cells:{}},_ids:{book:100,student:1000,loan:1,res:1}};
 let unsubscribe=null;
 // ═══ ALL STATE VARS UP TOP (prevents TDZ errors) ═══
 let libraries=[];
@@ -1636,7 +1650,7 @@ function createLibrary(){
   if(!name||!pin||pin.length!==4||isNaN(pin)){alert('נא למלא שם וקוד גישה (4 ספרות)');return;}
   const id='lib_'+Date.now();
   const meta={name,school,color:nlColor,icon:nlIcon,pin};
-  const emptyData={books:{},students:{},loans:{},reservations:{},actLog:[],settings:{school:school||name,loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},_ids:{book:100,student:1000,loan:1,res:1}};
+  const emptyData={books:{},students:{},loans:{},reservations:{},actLog:[],settings:{school:school||name,loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},dutyRoster:{rows:['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],cells:{}},_ids:{book:100,student:1000,loan:1,res:1}};
   fbDb.ref('libraries/'+id).set({meta,data:emptyData}).then(()=>{
     libraries.push({id,...meta});
     backToLibList();
@@ -1693,6 +1707,7 @@ function enterLibrary(id){
       reservations:fbArrToArr(val.reservations),
       actLog:Array.isArray(val.actLog)?val.actLog:(val.actLog?Object.values(val.actLog):[]),
       settings:val.settings||{school:'',loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},
+      dutyRoster:val.dutyRoster||{rows:['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],cells:{}},
       _ids:val._ids||{book:100,student:1000,loan:1,res:1}
     };
     // Migrate old class format ("ג1" → "כיתה ג1") and save
@@ -1759,6 +1774,7 @@ function saveDB(){
       reservations:arrToFbObj(DB.reservations),
       actLog:DB.actLog.slice(0,50),
       settings:DB.settings,
+      dutyRoster:DB.dutyRoster,
       _ids:DB._ids
     };
     currentLibRef.update(toSave).catch(e=>console.error('Save error:',e));
@@ -1773,7 +1789,7 @@ function arrToFbObj(arr){
 //  NAVIGATION
 // ════════════════════════════════════════
 let currentView='dashboard';
-const VTITLES={dashboard:'לוח בקרה',loans:'השאלה / החזרה',books:'ספרים',students:'תלמידים',reservations:'הזמנות',alerts:'התראות איחור',labels:'מדבקות ברקוד',reports:'דוחות',settings:'הגדרות'};
+const VTITLES={dashboard:'לוח בקרה',loans:'השאלה / החזרה',books:'ספרים',students:'תלמידים',reservations:'הזמנות',alerts:'התראות איחור',labels:'מדבקות ברקוד',roster:'תורנויות ספרנים',reports:'דוחות',settings:'הגדרות'};
 function showView(name,el){
   currentView=name;
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -1791,6 +1807,7 @@ function refreshCurrentView(){
   if(currentView==='reservations')renderRes();
   if(currentView==='reports')renderReports();
   if(currentView==='alerts')renderAlerts();
+  if(currentView==='roster')renderRoster();
   if(currentView==='settings'){
     document.getElementById('set-school').value=DB.settings.school||'';
     document.getElementById('set-days').value=DB.settings.loanDays||14;
@@ -3599,6 +3616,67 @@ function renderAlerts(){
       <button class="btn btn-xs btn-ghost" onclick="extendLoan(${l.id});renderAlerts()">+ארכה</button>
     </div>`;
   }).join(''):`<div class="empty-state" style="padding:20px"><div class="eicon">✅</div><div>אין החזרות קרובות</div></div>`;
+}
+
+// ════════════════════════════════════════
+//  DUTY ROSTER (librarians)
+// ════════════════════════════════════════
+const ROSTER_DAYS=['ראשון','שני','שלישי','רביעי','חמישי'];
+function renderRoster(){
+  if(!DB.dutyRoster)DB.dutyRoster={rows:['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],cells:{}};
+  const roster=DB.dutyRoster;
+  const canEdit=!!isAdminVerified;
+  const table=document.getElementById('roster-table');
+  const headCells=ROSTER_DAYS.map(d=>`<th style="text-align:center">${esc(d)}</th>`).join('');
+  const bodyRows=roster.rows.map((label,ri)=>{
+    const dayCells=ROSTER_DAYS.map((_,di)=>{
+      const key=ri+'_'+di;
+      const val=roster.cells[key]||'';
+      return`<td><input type="text" value="${esc(val)}" placeholder="—" ${canEdit?'':'readonly'}
+        style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:5px 7px;font-size:11px;text-align:center;background:${canEdit?'#fff':'var(--surface2)'}"
+        onchange="updateRosterCell(${ri},${di},this.value)"></td>`;
+    }).join('');
+    return`<tr>
+      <td style="min-width:120px">
+        <div style="display:flex;align-items:center;gap:5px">
+          <input type="text" value="${esc(label)}" ${canEdit?'':'readonly'}
+            style="flex:1;border:1.5px solid var(--border);border-radius:6px;padding:5px 7px;font-size:11px;font-weight:700;background:${canEdit?'#fff':'var(--surface2)'}"
+            onchange="updateRosterRowLabel(${ri},this.value)">
+          ${canEdit?`<button class="btn btn-xs btn-danger" onclick="removeRosterRow(${ri})" title="מחק שורה">✕</button>`:''}
+        </div>
+      </td>
+      ${dayCells}
+    </tr>`;
+  }).join('');
+  table.innerHTML=`<thead><tr><th>שעה / משמרת</th>${headCells}</tr></thead><tbody>${bodyRows||`<tr><td colspan="6"><div class="empty-state"><div class="eicon">🗓️</div><h3>אין שורות עדיין</h3></div></td></tr>`}</tbody>`;
+}
+function addRosterRow(){
+  DB.dutyRoster.rows.push('שורה חדשה');
+  renderRoster();saveDB();
+}
+function removeRosterRow(ri){
+  if(!confirm('למחוק שורה זו מהתורנויות?'))return;
+  DB.dutyRoster.rows.splice(ri,1);
+  // Re-key cells: drop this row's cells and shift later rows down
+  const newCells={};
+  Object.keys(DB.dutyRoster.cells).forEach(key=>{
+    const[rowIdx,dayIdx]=key.split('_').map(Number);
+    if(rowIdx===ri)return;
+    const newRowIdx=rowIdx>ri?rowIdx-1:rowIdx;
+    newCells[newRowIdx+'_'+dayIdx]=DB.dutyRoster.cells[key];
+  });
+  DB.dutyRoster.cells=newCells;
+  renderRoster();saveDB();
+}
+function updateRosterRowLabel(ri,val){
+  DB.dutyRoster.rows[ri]=val.trim()||'שורה';
+  saveDB();
+}
+function updateRosterCell(ri,di,val){
+  const key=ri+'_'+di;
+  if(val.trim())DB.dutyRoster.cells[key]=val.trim();
+  else delete DB.dutyRoster.cells[key];
+  saveDB();
 }
 
 function exportOverdueExcel(){
