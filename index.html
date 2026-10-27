@@ -820,6 +820,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
           <div id="cls-filters"></div>
           <input type="text" id="ssearch" placeholder="חיפוש..." oninput="fStudentsText(this.value)" style="padding:4px 9px;border:1.5px solid var(--border);border-radius:20px;font-size:11px;direction:rtl;background:#fff;margin-right:auto;width:170px">
           <button class="btn btn-sm btn-ghost librarian-only" style="display:none" onclick="document.getElementById('xl-import').click()" title="ייבוא מאקסל">📥 ייבוא מאקסל</button>
+          <button class="btn btn-sm btn-ghost admin-only" onclick="openStudentSync()" title="עדכון רשימה מטבלה">🔄 עדכון רשימה</button>
           <input type="file" id="xl-import" accept=".xlsx,.xls,.csv" style="display:none" onchange="importStudentsExcel(event)">
           <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="openPromoteModal()" title="העלאת שכבה לכל בית הספר">🎓 העלאת שכבה</button>
           <button class="btn btn-sm btn-ghost librarian-only" style="display:none" onclick="openAddStudent('teacher')">+ מורה / צוות</button>
@@ -1280,6 +1281,38 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
     </div>
   </div>
   <div class="modal-footer"><button class="btn btn-ghost btn-sm" onclick="closeModal('modal-student')">ביטול</button><button class="btn btn-primary btn-sm" onclick="saveStudent()">שמור</button></div></div>
+</div>
+
+<!-- Bulk student list sync (paste from Excel/Sheets + compare) -->
+<div class="modal-overlay" id="modal-sync">
+  <div class="modal" style="width:min(640px,96vw)">
+    <div class="modal-header"><h3>🔄 עדכון רשימת תלמידים מטבלה</h3><button class="modal-close" onclick="closeModal('modal-sync')">✕</button></div>
+    <div class="modal-body">
+      <div id="sync-step-paste">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:8px">
+          העתיקי עמודות מאקסל / Google Sheets (שם מלא, ואופציונלית כיתה) והדביקי כאן. שורה לכל תלמיד/ה.
+        </p>
+        <textarea id="sync-paste-area" placeholder="דני כהן&#10;רותי לוי&#9;כיתה ד1&#10;..." style="width:100%;height:160px;padding:10px;border:1.5px solid var(--border);border-radius:7px;font-family:'Heebo',sans-serif;font-size:12px;direction:rtl;resize:vertical;box-sizing:border-box"></textarea>
+        <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center;margin-top:10px" onclick="compareStudentPaste()">השוואה ←</button>
+      </div>
+      <div id="sync-step-review" style="display:none">
+        <div id="sync-summary" style="font-size:12px;font-weight:700;margin-bottom:10px"></div>
+        <div id="sync-add-section" style="margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px">➕ חדשים להוספה</div>
+          <div id="sync-add-list" style="max-height:160px;overflow-y:auto;border:1.5px solid var(--border);border-radius:7px"></div>
+        </div>
+        <div id="sync-del-section">
+          <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">🗑 לא נמצאו ברשימה החדשה — מועמדים למחיקה</div>
+          <div id="sync-del-list" style="max-height:220px;overflow-y:auto;border:1.5px solid var(--border);border-radius:7px"></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="syncBackToPaste()">← חזרה לעריכת הטקסט</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-sync')">ביטול</button>
+      <button class="btn btn-primary btn-sm" id="sync-apply-btn" style="display:none" onclick="applyStudentSync()">החל שינויים</button>
+    </div>
+  </div>
 </div>
 
 <!-- Student Detail -->
@@ -2481,6 +2514,106 @@ function importStudentsExcel(event){
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+// ── Bulk student list sync: paste from Excel/Sheets, compare, review ──
+let syncState={toAdd:[],toDelete:[]};
+function parseStudentPasteRows(text){
+  const lines=text.split(/\r?\n/).map(l=>l.replace(/\s+$/,'')).filter(l=>l.trim());
+  let rows=lines.map(line=>{
+    let cells;
+    if(line.includes('\t'))cells=line.split('\t');
+    else if(line.includes(','))cells=line.split(',');
+    else if(/ {2,}/.test(line))cells=line.split(/ {2,}/);
+    else cells=[line];
+    cells=cells.map(c=>c.trim());
+    while(cells.length>1&&cells[cells.length-1]==='')cells.pop();
+    return cells;
+  });
+  const headerNorm=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,'');
+  const headerWords=['שם','name','שםמלא','תלמיד','שםפרטי','first'];
+  if(rows.length&&headerWords.includes(headerNorm(rows[0][0])))rows=rows.slice(1);
+  return rows.map(cells=>{
+    let nameRaw='',cls='';
+    if(cells.length>=3){nameRaw=(cells[0]+' '+cells[1]).trim();cls=cells[2]||'';}
+    else{nameRaw=cells[0]||'';cls=cells[1]||'';}
+    const parts=nameRaw.trim().split(/\s+/).filter(Boolean);
+    return{first:parts[0]||'',last:parts.slice(1).join(' '),cls:cls.trim()};
+  }).filter(r=>r.first);
+}
+function openStudentSync(){
+  document.getElementById('sync-paste-area').value='';
+  syncBackToPaste();
+  openModal('modal-sync');
+}
+function syncBackToPaste(){
+  document.getElementById('sync-step-paste').style.display='';
+  document.getElementById('sync-step-review').style.display='none';
+  document.getElementById('sync-apply-btn').style.display='none';
+}
+function compareStudentPaste(){
+  const text=document.getElementById('sync-paste-area').value;
+  const parsed=parseStudentPasteRows(text);
+  if(!parsed.length){alert('לא זוהו שורות תקינות. ודאי שהדבקת לפחות שם אחד.');return;}
+  const normName=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+  const currentStudents=DB.students.filter(s=>(s.role||'student')==='student');
+  const pastedNames=new Set(parsed.map(r=>normName(r.first+' '+r.last)));
+  const existingNames=new Set(currentStudents.map(s=>normName(s.first+' '+s.last)));
+
+  syncState.toAdd=parsed.filter(r=>!existingNames.has(normName(r.first+' '+r.last)))
+    .map((r,i)=>({...r,_id:i,checked:true}));
+  syncState.toDelete=currentStudents.filter(s=>!pastedNames.has(normName(s.first+' '+s.last)))
+    .map(s=>({student:s,checked:false,activeLoans:DB.loans.filter(l=>l.studentId===s.id&&(l.status==='active'||l.status==='overdue')).length}));
+
+  renderSyncReview();
+  document.getElementById('sync-step-paste').style.display='none';
+  document.getElementById('sync-step-review').style.display='';
+  document.getElementById('sync-apply-btn').style.display='';
+}
+function renderSyncReview(){
+  document.getElementById('sync-summary').textContent=
+    `נמצאו ${syncState.toAdd.length} חדשים להוספה, ${syncState.toDelete.length} שלא מופיעים ברשימה החדשה.`;
+
+  const addList=document.getElementById('sync-add-list');
+  addList.innerHTML=syncState.toAdd.length?syncState.toAdd.map(r=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--surface2);font-size:12px;cursor:pointer">
+      <input type="checkbox" ${r.checked?'checked':''} onchange="syncState.toAdd.find(x=>x._id===${r._id}).checked=this.checked">
+      <div style="flex:1"><div style="font-weight:700">${esc(r.first+' '+r.last)}</div>${r.cls?`<div style="font-size:10px;color:var(--muted)">${esc(r.cls)}</div>`:''}</div>
+    </label>`).join('') : `<div style="padding:12px;text-align:center;font-size:11px;color:var(--muted)">אין תלמידים חדשים</div>`;
+
+  const delList=document.getElementById('sync-del-list');
+  delList.innerHTML=syncState.toDelete.length?syncState.toDelete.map((d,i)=>{
+    const s=d.student,warn=d.activeLoans>0;
+    return`<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--surface2);font-size:12px;cursor:${warn?'not-allowed':'pointer'};opacity:${warn?'.55':'1'}">
+      <input type="checkbox" ${d.checked?'checked':''} ${warn?'disabled':''} onchange="syncState.toDelete[${i}].checked=this.checked">
+      <div style="flex:1">
+        <div style="font-weight:700">${esc(s.first+' '+s.last)}</div>
+        <div style="font-size:10px;color:var(--muted)">${esc(s.cls||'')} · ${esc(s.card)}${warn?` · ⚠️ ${d.activeLoans} ספרים מושאלים כעת — לא ניתן למחוק`:''}</div>
+      </div>
+    </label>`;
+  }).join('') : `<div style="padding:12px;text-align:center;font-size:11px;color:var(--muted)">כל התלמידים הקיימים נמצאים ברשימה החדשה</div>`;
+}
+function applyStudentSync(){
+  const toAdd=syncState.toAdd.filter(r=>r.checked);
+  const toDelete=syncState.toDelete.filter(d=>d.checked&&!d.activeLoans);
+  if(!toAdd.length&&!toDelete.length){alert('לא נבחרו שינויים');return;}
+  if(!confirm(`להוסיף ${toAdd.length} תלמידים ולמחוק ${toDelete.length} תלמידים?`))return;
+
+  toAdd.forEach(r=>{
+    DB._ids.student++;
+    DB.students.push({id:DB._ids.student,first:r.first,last:r.last,cls:r.cls||'כיתה א1',role:'student',roleText:'',phone:'',isHelper:false,card:'S'+DB._ids.student,debt:0});
+  });
+  toDelete.forEach(d=>{
+    const id=d.student.id;
+    DB.students=DB.students.filter(s=>s.id!==id);
+    DB.reservations=DB.reservations.filter(r=>r.studentId!==id);
+  });
+  if(toAdd.length)addAct(`עדכון רשימה: ${toAdd.length} תלמידים נוספו`,'#2980b9');
+  if(toDelete.length)addAct(`עדכון רשימה: ${toDelete.length} תלמידים נמחקו`,'#c0392b');
+  renderStudents();renderRes();
+  saveDB();
+  closeModal('modal-sync');
+  alert(`בוצע: ${toAdd.length} נוספו, ${toDelete.length} נמחקו.`);
 }
 
 function delStudent(id){
