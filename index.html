@@ -191,7 +191,14 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
 .nb-add-btn.exists{background:var(--muted);cursor:default}
 .nb-clear-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;border:1.5px solid var(--border);background:#fff;cursor:pointer;color:var(--red);font-family:'Heebo',sans-serif;transition:all .15s}
 .nb-clear-btn:hover{background:#fbe6e6;border-color:var(--red)}
-.admin-only{display:none} /* shown only when admin logged in */
+.admin-only,.librarian-only{display:none} /* shown only when admin/librarian logged in */
+/* Driven by a class on <body> instead of per-element inline styles, so the
+   rule also applies to rows/buttons rendered fresh after login (e.g. by
+   renderBooks()/renderStudents()) without needing every render function to
+   re-run the visibility toggle. Higher specificity than .btn/.admin-only
+   above means it wins the cascade regardless of declaration order. */
+body.is-admin .admin-only,body.is-admin .librarian-only,body.is-librarian .librarian-only{display:inline-flex}
+body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librarian input.librarian-only{display:inline-block}
 
 /* QUICK LOAN */
 .quick-bar{background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;gap:11px;align-items:flex-end}
@@ -738,8 +745,8 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
             <div class="filter-chip active" onclick="fBooks('all',this)">הכל</div>
             <div id="grp-filters"></div>
             <div style="margin-right:auto;display:flex;gap:6px">
-              <button class="btn btn-sm btn-teal librarian-only" style="display:none" onclick="openBulkImport()">📥 ייבוא מאסיבי</button>
-          <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="openFindReplace()">🔄 חיפוש והחלפה</button>
+              <button class="btn btn-sm btn-teal librarian-only" onclick="openBulkImport()">📥 ייבוא מאסיבי</button>
+          <button class="btn btn-sm btn-ghost admin-only" onclick="openFindReplace()">🔄 חיפוש והחלפה</button>
               <button class="btn btn-sm btn-ghost" onclick="exportBooks()">⬇ ייצוא</button>
               <button class="btn btn-sm btn-primary admin-only librarian-only" onclick="openAddBookModal()">+ ספר</button>
             </div>
@@ -820,12 +827,12 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
           <div class="filter-chip" onclick="fStudentsRole('teacher',this)" id="sf-teacher">👩‍🏫 מורים / צוות</div>
           <div id="cls-filters"></div>
           <input type="text" id="ssearch" placeholder="חיפוש..." oninput="fStudentsText(this.value)" style="padding:4px 9px;border:1.5px solid var(--border);border-radius:20px;font-size:11px;direction:rtl;background:#fff;margin-right:auto;width:170px">
-          <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="document.getElementById('xl-import').click()" title="ייבוא מאקסל">📥 ייבוא מאקסל</button>
+          <button class="btn btn-sm btn-ghost admin-only" onclick="document.getElementById('xl-import').click()" title="ייבוא מאקסל">📥 ייבוא מאקסל</button>
           <button class="btn btn-sm btn-ghost admin-only" onclick="openStudentSync()" title="עדכון רשימה מטבלה">🔄 עדכון רשימה</button>
           <input type="file" id="xl-import" accept=".xlsx,.xls,.csv" style="display:none" onchange="importStudentsExcel(event)">
-          <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="openPromoteModal()" title="העלאת שכבה לכל בית הספר">🎓 העלאת שכבה</button>
-          <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="openAddStudent('teacher')">+ מורה / צוות</button>
-          <button class="btn btn-sm btn-primary admin-only" style="display:none" onclick="openAddStudent('student')">+ תלמיד</button>
+          <button class="btn btn-sm btn-ghost admin-only" onclick="openPromoteModal()" title="העלאת שכבה לכל בית הספר">🎓 העלאת שכבה</button>
+          <button class="btn btn-sm btn-ghost admin-only" onclick="openAddStudent('teacher')">+ מורה / צוות</button>
+          <button class="btn btn-sm btn-primary admin-only" onclick="openAddStudent('student')">+ תלמיד</button>
         </div>
 
         <!-- Bulk selection action bar -->
@@ -1000,11 +1007,11 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
           <span style="font-size:13px;font-weight:700;color:var(--navy)">📊 דוחות וסטטיסטיקות</span>
           <div style="margin-right:auto;display:flex;gap:7px;flex-wrap:wrap">
-            <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="sendOverdueReminders()">📧 תזכורת באיחור</button>
-            <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="exportBooksExcel()">📊 ייצוא ספרים לאקסל</button>
-            <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="exportStudentsExcel()">👥 ייצוא תלמידים לאקסל</button>
-            <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="exportLoansExcel()">🔄 ייצוא השאלות לאקסל</button>
-            <button class="btn btn-sm btn-ghost admin-only" style="display:none" onclick="backupToGoogleDrive()">☁️ גיבוי ל-Drive</button>
+            <button class="btn btn-sm btn-ghost admin-only" onclick="sendOverdueReminders()">📧 תזכורת באיחור</button>
+            <button class="btn btn-sm btn-ghost admin-only" onclick="exportBooksExcel()">📊 ייצוא ספרים לאקסל</button>
+            <button class="btn btn-sm btn-ghost admin-only" onclick="exportStudentsExcel()">👥 ייצוא תלמידים לאקסל</button>
+            <button class="btn btn-sm btn-ghost admin-only" onclick="exportLoansExcel()">🔄 ייצוא השאלות לאקסל</button>
+            <button class="btn btn-sm btn-ghost admin-only" onclick="backupToGoogleDrive()">☁️ גיבוי ל-Drive</button>
           </div>
         </div>
         <!-- Stats row -->
@@ -1384,7 +1391,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface2)}
       <div class="table-wrap" id="asr-results" style="max-height:340px;overflow-y:auto"></div>
     </div>
     <div class="modal-footer" style="justify-content:space-between">
-      <button class="btn btn-ghost btn-sm admin-only" style="display:none" onclick="closeModal('modal-advsearch');openFindReplace()">🔄 חיפוש והחלפה גורפת</button>
+      <button class="btn btn-ghost btn-sm admin-only" onclick="closeModal('modal-advsearch');openFindReplace()">🔄 חיפוש והחלפה גורפת</button>
       <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-advsearch')">סגור</button>
     </div>
   </div>
@@ -1708,7 +1715,10 @@ function enterLibrary(id){
       reservations:fbArrToArr(val.reservations),
       actLog:Array.isArray(val.actLog)?val.actLog:(val.actLog?Object.values(val.actLog):[]),
       settings:val.settings||{school:'',loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},
-      dutyRoster:val.dutyRoster||{rows:['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],cells:{}},
+      dutyRoster:{
+        rows:(val.dutyRoster&&val.dutyRoster.rows)||['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],
+        cells:(val.dutyRoster&&val.dutyRoster.cells)||{}
+      },
       _ids:val._ids||{book:100,student:1000,loan:1,res:1}
     };
     // Migrate old class format ("ג1" → "כיתה ג1") and save
@@ -3625,6 +3635,11 @@ function renderAlerts(){
 const ROSTER_DAYS=['ראשון','שני','שלישי','רביעי','חמישי'];
 function renderRoster(){
   if(!DB.dutyRoster)DB.dutyRoster={rows:['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],cells:{}};
+  // Firebase drops empty objects/arrays on write, so cells:{} (never used
+  // yet) or rows:[] (all rows deleted) come back missing entirely on
+  // reload — default both defensively rather than assume they survived.
+  if(!DB.dutyRoster.cells)DB.dutyRoster.cells={};
+  if(!DB.dutyRoster.rows)DB.dutyRoster.rows=[];
   const roster=DB.dutyRoster;
   const canEdit=!!isAdminVerified;
   const table=document.getElementById('roster-table');
@@ -4613,12 +4628,7 @@ function updateLibrarianUI(){
   if(icon)icon.textContent=isLibrarianVerified?'🟢':'📚';
   if(label)label.textContent=isLibrarianVerified?currentLibrarianName:'כניסת ספרנ/ית';
   if(btn)btn.style.color=isLibrarianVerified?'#7fff9a':'rgba(255,255,255,.5)';
-  // Show book-add buttons for librarians and admins. Some of these elements
-  // also carry .admin-only (e.g. "+ ספר"), which sets display:none and wins
-  // the CSS cascade over .btn{display:inline-flex} regardless of inline
-  // style — so revealing needs an explicit value, not ''.
-  document.querySelectorAll('.librarian-only').forEach(el=>
-    el.style.display=(isAdminVerified||isLibrarianVerified)?'inline-flex':'none');
+  document.body.classList.toggle('is-librarian',isLibrarianVerified);
 }
 
 // Invite a librarian by email from the admin panel (per-library, email-based like admins)
@@ -4836,24 +4846,14 @@ function updateAdminUI(){
   if(icon)icon.textContent=isAdmin?'🟢':'🔒';
   if(label)label.textContent=isAdmin?(currentAdmin?.displayName||currentAdmin?.email?.split('@')[0]||'מנהל'):'כניסת מנהל';
   if(btn)btn.style.color=isAdmin?'#7fff9a':'rgba(255,255,255,.6)';
-  document.querySelectorAll('.admin-only').forEach(el=>{
-    if(isAdmin){
-      // .admin-only{display:none} and .btn{display:inline-flex} have equal
-      // CSS specificity, and .admin-only is declared later in the
-      // stylesheet, so clearing the inline style to '' never actually
-      // overrides it — an explicit value is required to reveal the element.
-      el.style.display=el.tagName==='INPUT'?'inline-block':'inline-flex';
-    }else{
-      el.style.display='none';
-    }
-  });
-  // Admin also gets librarian-only elements
-  document.querySelectorAll('.librarian-only').forEach(el=>el.style.display=isAdmin?'':'none');
+  // Driven by a body class (see .admin-only/.librarian-only CSS) instead of
+  // touching each element directly, so it also covers elements rendered
+  // fresh after login by renderBooks()/renderStudents()/etc. — those are
+  // regenerated far more often than this function re-runs.
+  document.body.classList.toggle('is-admin',isAdmin);
   // Show/hide admin students bar
   const asb=document.getElementById('admin-students-bar');
   if(asb)asb.style.display=isAdmin?'flex':'none';
-  // Re-render students so row checkboxes are correctly shown/hidden
-  if(isAdmin&&currentView==='students') renderStudents();
   // Refresh admin panel if open
   if(document.getElementById('admin-modal-info')?.style.display!=='none') renderAdminList();
   updateLibrarianUI();
