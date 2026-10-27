@@ -4555,6 +4555,11 @@ async function adminSignInGoogle(){
   const msg=document.getElementById('admin-auth-msg');
   try{
     const provider=new firebase.auth.GoogleAuthProvider();
+    // Force the Google account picker instead of silently reusing
+    // whichever account this browser already has an active session
+    // for — important when managing more than one admin/librarian
+    // account from the same browser.
+    provider.setCustomParameters({prompt:'select_account'});
     await fbAuth.signInWithPopup(provider);
     msg.textContent='✅ התחברת עם Google!';msg.style.color='var(--green)';
     setTimeout(()=>closeModal('modal-admin'),800);
@@ -4597,6 +4602,7 @@ async function librarianSignInGoogle(){
   const msg=document.getElementById('lib-login-msg');
   try{
     const provider=new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({prompt:'select_account'});
     await fbAuth.signInWithPopup(provider);
     msg.style.color='var(--green)';msg.textContent='✅ התחברת עם Google!';
     setTimeout(()=>{
@@ -4772,15 +4778,23 @@ function saveBackupDays(){
 
 // ── Check pending invite on login ──
 async function checkPendingInvite(user){
-  if(!user?.email)return;
-  const key=user.email.replace(/\./g,'_');
-  const snap=await fbDb.ref('adminInvites/'+key).once('value');
-  if(snap.exists()){
-    // Accept invite — grant admin
-    await fbDb.ref('admins/'+user.uid).set(true);
-    await fbDb.ref('adminEmails/'+user.uid).set(user.email);
-    await fbDb.ref('adminInvites/'+key).remove();
-    return true;
+  if(!user?.email)return false;
+  try{
+    const key=user.email.toLowerCase().replace(/\./g,'_');
+    const snap=await fbDb.ref('adminInvites/'+key).once('value');
+    if(snap.exists()){
+      // Accept invite — grant admin
+      await fbDb.ref('admins/'+user.uid).set(true);
+      await fbDb.ref('adminEmails/'+user.uid).set(user.email);
+      await fbDb.ref('adminInvites/'+key).remove();
+      return true;
+    }
+  }catch(e){
+    // If this read fails (e.g. a permission rule denies it for a
+    // not-yet-admin user), don't let it silently abort the whole
+    // checkAdminStatus() chain — fall through and let the direct
+    // admins/<uid> check below run instead.
+    console.warn('checkPendingInvite failed:',e);
   }
   return false;
 }
@@ -4810,13 +4824,17 @@ async function checkAdminStatus(user){
 // ── Librarian role: email-invite based, scoped per-library ──
 async function checkPendingLibrarianInvite(user){
   if(!user?.email||!currentLibRef)return false;
-  const key=user.email.replace(/\./g,'_');
-  const snap=await currentLibRef.child('librarianInvites/'+key).once('value');
-  if(snap.exists()){
-    await currentLibRef.child('librarians/'+user.uid).set(true);
-    await currentLibRef.child('librarianEmails/'+user.uid).set(user.email);
-    await currentLibRef.child('librarianInvites/'+key).remove();
-    return true;
+  try{
+    const key=user.email.toLowerCase().replace(/\./g,'_');
+    const snap=await currentLibRef.child('librarianInvites/'+key).once('value');
+    if(snap.exists()){
+      await currentLibRef.child('librarians/'+user.uid).set(true);
+      await currentLibRef.child('librarianEmails/'+user.uid).set(user.email);
+      await currentLibRef.child('librarianInvites/'+key).remove();
+      return true;
+    }
+  }catch(e){
+    console.warn('checkPendingLibrarianInvite failed:',e);
   }
   return false;
 }
