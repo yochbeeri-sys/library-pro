@@ -638,7 +638,7 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
       <div class="nav-item" onclick="showView('roster',this)"><span class="icon">🗓️</span>תורנויות ספרנים</div>
       <div class="nav-item" onclick="showView('reports',this)"><span class="icon">📊</span>דוחות</div>
 
-      <div class="nav-item" onclick="showView('settings',this)"><span class="icon">⚙️</span>הגדרות</div>
+      <div class="nav-item admin-only" onclick="showView('settings',this)"><span class="icon">⚙️</span>הגדרות</div>
       <!-- Librarian login -->
       <div id="nav-librarian-btn" onclick="openLibrarianModal()"
         style="margin:4px 10px 2px;padding:7px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;border:1.5px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);transition:all .2s"
@@ -1784,10 +1784,16 @@ function saveDB(){
       loans:arrToFbObj(DB.loans),
       reservations:arrToFbObj(DB.reservations),
       actLog:DB.actLog.slice(0,50),
-      settings:DB.settings,
       dutyRoster:DB.dutyRoster,
       _ids:DB._ids
     };
+    // settings is admin-only at the database rules level. It's only
+    // included here (as part of this one atomic multi-path update) when
+    // the actor is actually an admin — otherwise Firebase would reject
+    // the whole update (books/loans/etc. included) over the settings
+    // key alone, since a multi-path update needs write permission on
+    // every path it touches.
+    if(isAdminVerified)toSave.settings=DB.settings;
     currentLibRef.update(toSave).catch(e=>console.error('Save error:',e));
   },400);
 }
