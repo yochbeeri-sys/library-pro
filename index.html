@@ -2016,8 +2016,9 @@ function renderBooks(){
       <td><span class="badge ${av>0&&!b.noLoan?'badge-green':'badge-red'}">${b.noLoan?'\u{1F6AB}':av+'/'+b.copies.length}</span></td>
       <td><div class="td-act">
         ${b.pendingApproval?`<button class="btn btn-xs admin-only" style="background:var(--green);color:#fff" onclick="approveBook(${b.id})" title="אשר ספר">✓ אשר</button>
-        <button class="btn btn-xs btn-danger admin-only" onclick="rejectBook(${b.id})" title="דחה ומחק">✕ דחה</button>`:''}
-        <button class="btn btn-xs btn-ghost" onclick="editBook(${b.id})">✏️</button>
+        <button class="btn btn-xs btn-danger admin-only" onclick="rejectBook(${b.id})" title="דחה ומחק">✕ דחה</button>
+        <button class="btn btn-xs btn-ghost admin-only" onclick="editBook(${b.id})" title="עריכה לפני אישור">✏️ עריכה</button>`:
+        `<button class="btn btn-xs btn-ghost" onclick="editBook(${b.id})">✏️</button>`}
         <button class="btn btn-xs" style="background:var(--teal);color:#fff" onclick="goLabels(${b.id})">🏷</button>
         <button class="btn btn-xs" style="background:${printQueueIds.has(b.id)?'var(--green)':'#6366f1'};color:#fff" onclick="addBookToPrintQueue(${b.id})" title="${printQueueIds.has(b.id)?'ברשימת ההדפסה ✓':'הוסף לתור הדפסה'}">${printQueueIds.has(b.id)?'✓🖨':'🖨'}</button>
         ${!b.noLoan&&!b.pendingApproval&&b.copies.filter(c=>c.status==='available').length>0?`<button class="btn btn-xs" style="background:var(--accent);color:#fff" onclick="quickLoan(${b.id})" title="השאל ספר">📤 השאל</button>`:''}
