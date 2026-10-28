@@ -629,7 +629,7 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
       <div class="nav-item active" onclick="showView('dashboard',this)"><span class="icon">🏠</span>לוח בקרה</div>
       <div class="nav-item" onclick="showView('loans',this)"><span class="icon">🔄</span>השאלה / החזרה<span class="nav-badge" id="badge-od" style="display:none">0</span></div>
       <div class="sb-sec">ניהול</div>
-      <div class="nav-item" onclick="showView('books',this)"><span class="icon">📚</span>ספרים</div>
+      <div class="nav-item" onclick="showView('books',this)"><span class="icon">📚</span>ספרים<span class="nav-badge" id="badge-pending-books" style="display:none">0</span></div>
       <div class="nav-item" onclick="showView('students',this)"><span class="icon">👥</span>תלמידים</div>
       <div class="nav-item" onclick="showView('reservations',this)"><span class="icon">📋</span>הזמנות<span class="nav-badge" id="badge-res" style="display:none">0</span></div>
       <div class="nav-item" onclick="showView('alerts',this)"><span class="icon">🔔</span>התראות איחור<span class="nav-badge" id="badge-alerts" style="display:none">0</span></div>
@@ -1845,6 +1845,8 @@ function updateSbStats(){
   const bod=document.getElementById('badge-od');if(od>0){bod.style.display='';bod.textContent=od;}else bod.style.display='none';
   const bres=document.getElementById('badge-res');if(pr>0){bres.style.display='';bres.textContent=pr;}else bres.style.display='none';
   const balerts=document.getElementById('badge-alerts');if(od>0){balerts.style.display='';balerts.textContent=od;}else balerts.style.display='none';
+  const pend=DB.books.filter(b=>b.pendingApproval).length;
+  const bpend=document.getElementById('badge-pending-books');if(bpend){if(pend>0){bpend.style.display='';bpend.textContent=pend;}else bpend.style.display='none';}
 }
 function updateDataLists(){
   const al=document.getElementById('authors-list');
@@ -1999,9 +2001,10 @@ function renderBooks(){
     const av=b.copies.filter(c=>c.status==='available').length;
     const tagsHtml=(b.tags||[]).slice(0,3).map(t=>`<span class="tag-chip">${esc(t)}</span>`).join('');
     const noLoanBadge=b.noLoan?`<span class="badge" style="background:#fbe6e6;color:var(--red);font-size:9px;margin-right:4px">\u{1F6AB} \u05DC\u05D0 \u05DC\u05D4\u05E9\u05D0\u05DC\u05D4</span>`:'';
-    return`<tr>
+    const pendingBadge=b.pendingApproval?`<span class="badge" style="background:#fef0e4;color:#8a3a00;font-size:9px;margin-right:4px">\u23F3 \u05DE\u05DE\u05EA\u05D9\u05DF \u05DC\u05D0\u05D9\u05E9\u05D5\u05E8</span>`:'';
+    return`<tr${b.pendingApproval?' style="background:#fffaf2"':''}>
       <td><input type="checkbox" class="book-select-cb" data-id="${b.id}" ${bookSelIds.has(b.id)?'checked':''} onchange="toggleBookSelect(${b.id},this.checked)" style="cursor:pointer;accent-color:var(--blue)"></td>
-      <td><div style="font-weight:700;font-size:12px">${esc(b.title)} ${noLoanBadge}</div>
+      <td><div style="font-weight:700;font-size:12px">${esc(b.title)} ${noLoanBadge}${pendingBadge}</div>
         ${b.subject?`<div style="font-size:10px;color:var(--muted)">${esc(b.subject)}</div>`:''}
         ${tagsHtml?`<div style="margin-top:2px">${tagsHtml}</div>`:''}
         ${b.cover?`<img src="${b.cover}" style="width:22px;height:30px;object-fit:cover;border-radius:2px;border:1px solid var(--border);margin-top:2px" onerror="this.style.display='none'">`:''}</td>
@@ -2012,10 +2015,12 @@ function renderBooks(){
       <td style="text-align:center;font-size:11px">${b.copies.length}</td>
       <td><span class="badge ${av>0&&!b.noLoan?'badge-green':'badge-red'}">${b.noLoan?'\u{1F6AB}':av+'/'+b.copies.length}</span></td>
       <td><div class="td-act">
+        ${b.pendingApproval?`<button class="btn btn-xs admin-only" style="background:var(--green);color:#fff" onclick="approveBook(${b.id})" title="אשר ספר">✓ אשר</button>
+        <button class="btn btn-xs btn-danger admin-only" onclick="rejectBook(${b.id})" title="דחה ומחק">✕ דחה</button>`:''}
         <button class="btn btn-xs btn-ghost" onclick="editBook(${b.id})">✏️</button>
         <button class="btn btn-xs" style="background:var(--teal);color:#fff" onclick="goLabels(${b.id})">🏷</button>
         <button class="btn btn-xs" style="background:${printQueueIds.has(b.id)?'var(--green)':'#6366f1'};color:#fff" onclick="addBookToPrintQueue(${b.id})" title="${printQueueIds.has(b.id)?'ברשימת ההדפסה ✓':'הוסף לתור הדפסה'}">${printQueueIds.has(b.id)?'✓🖨':'🖨'}</button>
-        ${!b.noLoan&&b.copies.filter(c=>c.status==='available').length>0?`<button class="btn btn-xs" style="background:var(--accent);color:#fff" onclick="quickLoan(${b.id})" title="השאל ספר">📤 השאל</button>`:''}
+        ${!b.noLoan&&!b.pendingApproval&&b.copies.filter(c=>c.status==='available').length>0?`<button class="btn btn-xs" style="background:var(--accent);color:#fff" onclick="quickLoan(${b.id})" title="השאל ספר">📤 השאל</button>`:''}
         <button class="btn btn-xs btn-danger admin-only" onclick="delBook(${b.id})" title="מחק ספר (מנהל בלבד)">🗑</button>
       </div></td>
     </tr>`;
@@ -2198,12 +2203,15 @@ function saveBook(stayOpen=false){
   }else{
     DB._ids.book++;
     const copies=Array.from({length:nc},(_,i)=>({num:i+1,bc:bc+'-'+(i+1),status:'available'}));
+    const pendingApproval=!isAdminVerified;
     DB.books.push({id:DB._ids.book,title,author:document.getElementById('mb-f-author').value.trim(),
       barcode:bc,section,shelf,group:grp,copies,loanCount:0,cover,
       subject,tags,year:selectedISBN?.year||'',series,seriesNum,noLoan,
+      pendingApproval,addedBy:currentAdmin?.email||currentLibrarianName||'',
       dateAdded:todayStr()});
-    addAct(`ספר חדש: "${title}"`,'#2980b9');
+    addAct(pendingApproval?`ספר ממתין לאישור: "${title}"`:`ספר חדש: "${title}"`,pendingApproval?'#d35400':'#2980b9');
   }
+  updateSbStats();
   saveDB();
   coverB64=null;selectedISBN=null;
   if(stayOpen){
@@ -2247,6 +2255,21 @@ function delBook(id){
   labelBooks=labelBooks.filter(l=>l.barcode!==book.barcode);
   addAct(`הספר "${book.title}" נמחק מהקטלוג`,'#c0392b');
   renderBooks();renderRes();renderLabelList();rebuildPrint();upMini();savePrintQueue();
+  saveDB();
+}
+function approveBook(id){
+  const book=DB.books.find(b=>b.id===id);if(!book||!book.pendingApproval)return;
+  book.pendingApproval=false;
+  addAct(`הספר "${book.title}" אושר ע"י מנהל/ת`,'#27ae60');
+  renderBooks();updateSbStats();
+  saveDB();
+}
+function rejectBook(id){
+  const book=DB.books.find(b=>b.id===id);if(!book||!book.pendingApproval)return;
+  if(!confirm(`לדחות ולמחוק את "${book.title}"? זה לא ניתן לביטול.`))return;
+  DB.books=DB.books.filter(b=>b.id!==id);
+  addAct(`הספר "${book.title}" נדחה ונמחק`,'#c0392b');
+  renderBooks();updateSbStats();
   saveDB();
 }
 function exportBooks(){const blob=new Blob([JSON.stringify(DB.books.map(b=>({title:b.title,author:b.author,barcode:b.barcode,section:b.section,shelf:b.shelf,group:b.group?.lbl,copies:b.copies.length})),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='books.json';a.click();}
@@ -3138,7 +3161,11 @@ function loanBookPreview(val){
   aEl.textContent=book.author||'';
   const av=copy.status==='available';
   const loaned=copy.status==='loaned'||copy.status==='overdue';
-  if(book.noLoan){
+  if(book.pendingApproval){
+    stEl.textContent='⏳ ממתין לאישור מנהל/ת';stEl.style.color='#ffd9a0';
+    btnL.disabled=true;btnL.style.opacity='.45';btnL.style.cursor='not-allowed';
+    btnR.disabled=true;btnR.style.opacity='.45';btnR.style.cursor='not-allowed';
+  } else if(book.noLoan){
     stEl.textContent='🚫 לא להשאלה';stEl.style.color='#ffaaaa';
     btnL.disabled=true;btnL.style.opacity='.45';btnL.style.cursor='not-allowed';
     btnR.disabled=true;btnR.style.opacity='.45';btnR.style.cursor='not-allowed';
@@ -3198,7 +3225,9 @@ function doLoan(){
   const maxForStudent=getStudentMaxBooks(student);
   if(al>=maxForStudent){showFB(`${student.first} כבר שאל/ה ${al} ספרים (מקסימום ${maxForStudent})`,'warning');return;}
   const found=findCopy(document.getElementById('loan-b').value);if(!found){showFB('ברקוד לא נמצא','warning');return;}
-  const{book,copy}=found;if(copy.status!=='available'){showFB(`עותק "${book.title}" אינו זמין`,'warning');return;}
+  const{book,copy}=found;
+  if(book.pendingApproval){showFB(`"${book.title}" ממתין לאישור מנהל/ת ועדיין לא ניתן להשאלה`,'warning');return;}
+  if(copy.status!=='available'){showFB(`עותק "${book.title}" אינו זמין`,'warning');return;}
   copy.status='loaned';
   DB._ids.loan++;
   const loan={id:DB._ids.loan,bookId:book.id,copyNum:copy.num,copyBc:copy.bc,studentId:student.id,loanDate:todayStr(),dueDate:addDays(todayStr(),DB.settings.loanDays||14),returnDate:null,status:'active'};
@@ -5344,15 +5373,18 @@ function biDoImport(){
       DB.books.push({id:DB._ids.book,title,
         author:(m.author?row[m.author]?.trim():'')||'',barcode:bc,section,shelf,group:grp,copies,loanCount:0,cover:null,
         subject:(m.subject?row[m.subject]?.trim():'')||'',tags,year:(m.year?row[m.year]?.trim():'')||'',
-        series:(m.series?row[m.series]?.trim():'')||'',seriesNum,dateAdded:todayStr()});
+        series:(m.series?row[m.series]?.trim():'')||'',seriesNum,
+        pendingApproval:!isAdminVerified,addedBy:currentAdmin?.email||currentLibrarianName||'',
+        dateAdded:todayStr()});
       added++;
     }catch(e){errors.push('שורה '+(idx+2)+': '+e.message);}
   });
-  addAct('ייבוא מאסיבי: '+added+' ספרים נוספו','#27ae60');
+  const pendingMsg=!isAdminVerified&&added>0?' (ממתינים לאישור מנהל/ת)':'';
+  addAct('ייבוא מאסיבי: '+added+' ספרים נוספו'+pendingMsg,'#27ae60');
   saveDB();updateSbStats();
   document.getElementById('bi-result').style.display='';
   document.getElementById('bi-result').innerHTML=`<div class="alert alert-success">
-    ✅ <strong>${added} ספרים</strong> נוספו לקטלוג!
+    ✅ <strong>${added} ספרים</strong> נוספו לקטלוג${pendingMsg}!
     ${skipped?`<br><span style="font-size:11px">${skipped} דולגו (כפולים / ללא שם)</span>`:''}
     ${errors.length?`<br><span style="color:var(--red);font-size:10px">${errors.slice(0,3).join('<br>')}</span>`:''}
   </div>`;
