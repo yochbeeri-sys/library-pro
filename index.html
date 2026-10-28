@@ -4771,20 +4771,36 @@ async function renderAdminList(){
   const el=document.getElementById('admin-list');
   if(!el)return;
   try{
-    const snap=await fbDb.ref('adminEmails').once('value');
-    const emails=snap.val()||{};
-    const entries=Object.entries(emails);
-    if(!entries.length){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:6px">אין מנהלים רשומים</div>';return;}
-    el.innerHTML=entries.map(([uid,email])=>`
+    const [adminSnap,inviteSnap]=await Promise.all([
+      fbDb.ref('adminEmails').once('value'),
+      fbDb.ref('adminInvites').once('value')
+    ]);
+    const emails=adminSnap.val()||{};
+    const invites=inviteSnap.val()||{};
+    const adminEntries=Object.entries(emails).map(([uid,email])=>`
       <div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;background:#fff;margin-bottom:3px">
         <span style="flex:1;direction:ltr;font-size:11px">${email}</span>
         ${uid!==currentAdmin?.uid?`<button onclick="removeAdmin('${uid}')"
           style="padding:2px 7px;border:none;border-radius:4px;background:var(--red);color:#fff;font-size:10px;cursor:pointer;font-family:Heebo,sans-serif">הסר</button>`:'<span style="font-size:9px;color:var(--green)">אתה</span>'}
-      </div>`).join('');
+      </div>`);
+    const inviteEntries=Object.entries(invites).map(([key,inv])=>`
+      <div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;background:var(--surface2);margin-bottom:3px;border:1px dashed var(--border)">
+        <span style="font-size:12px">⏳</span>
+        <span style="flex:1;direction:ltr;font-size:11px;color:var(--muted)">${esc(inv.email)} (ממתין/ה לכניסה ראשונה)</span>
+        <button onclick="removeAdminInvite('${key}')"
+          style="padding:2px 7px;border:none;border-radius:4px;background:var(--red);color:#fff;font-size:10px;cursor:pointer;font-family:Heebo,sans-serif">בטל</button>
+      </div>`);
+    const all=[...adminEntries,...inviteEntries];
+    el.innerHTML=all.length?all.join(''):'<div style="color:var(--muted);text-align:center;padding:6px">אין מנהלים רשומים</div>';
     // Set current backup days
     const bd=document.getElementById('backup-days-input');
     if(bd&&DB?.settings?.backupDays)bd.value=DB.settings.backupDays;
   }catch(e){el.innerHTML='<div style="color:var(--red);font-size:10px">'+e.message+'</div>';}
+}
+async function removeAdminInvite(key){
+  if(!confirm('לבטל את ההזמנה?'))return;
+  await fbDb.ref('adminInvites/'+key).remove();
+  renderAdminList();
 }
 
 async function addAdminByEmail(){
