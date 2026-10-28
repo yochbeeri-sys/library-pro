@@ -2500,17 +2500,34 @@ function importStudentsExcel(event){
     try{
       const wb = XLSX.read(e.target.result, {type:'array'});
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
-
-      if(!rows.length){ alert('הקובץ ריק או לא נקרא כהלכה'); return; }
 
       // Normalize column names (support Hebrew + English variants)
       const norm = s => String(s||'').trim().toLowerCase().replace(/\s+/g,'').replace(/['"]/g,'');
-
       const COL_FIRST  = ['שםפרטי','first','firstname','שם_פרטי','פרטי'];
       const COL_LAST   = ['שםמשפחה','last','lastname','שם_משפחה','משפחה'];
       const COL_CLASS  = ['כיתה','class','grade','כתה'];
       const COL_CARD   = ['כרטיס','card','מספרכרטיס','id'];
+
+      // Some school systems export a "report" with title/summary rows before
+      // the real header (school name, "total students", a formula cell...) —
+      // don't assume row 1 is the header, scan for the row that actually
+      // has first-name/last-name-like column labels.
+      const rawRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(!rawRows.length){ alert('הקובץ ריק או לא נקרא כהלכה'); return; }
+      let headerRowIdx = -1;
+      for(let i=0;i<Math.min(30,rawRows.length);i++){
+        const cells=rawRows[i].map(norm);
+        if(cells.some(c=>COL_FIRST.includes(c))&&cells.some(c=>COL_LAST.includes(c))){headerRowIdx=i;break;}
+      }
+      if(headerRowIdx===-1){
+        alert('לא נמצאו עמודות שם פרטי / שם משפחה.\nוודאי שהקובץ כולל עמודות בשם:\nשם פרטי | שם משפחה | כיתה');
+        return;
+      }
+      const headerRow=rawRows[headerRowIdx];
+      const rows=rawRows.slice(headerRowIdx+1)
+        .map(r=>{const obj={};headerRow.forEach((h,idx)=>{obj[h]=r[idx]!==undefined?r[idx]:'';});return obj;})
+        .filter(r=>Object.values(r).some(v=>String(v).trim()!==''));
+      if(!rows.length){ alert('לא נמצאו שורות נתונים מתחת לכותרות'); return; }
 
       const findCol = (keys, row) => {
         const rowKeys = Object.keys(row);
@@ -2525,11 +2542,6 @@ function importStudentsExcel(event){
       const cLast  = findCol(COL_LAST,  firstRow);
       const cClass = findCol(COL_CLASS, firstRow);
       const cCard  = findCol(COL_CARD,  firstRow);
-
-      if(!cFirst || !cLast){
-        alert('לא נמצאו עמודות שם פרטי / שם משפחה.\nוודאי שהקובץ כולל עמודות בשם:\nשם פרטי | שם משפחה | כיתה');
-        return;
-      }
 
       let added=0, skipped=0;
       rows.forEach(row => {
