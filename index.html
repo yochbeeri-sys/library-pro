@@ -829,6 +829,7 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
           <input type="text" id="ssearch" placeholder="חיפוש..." oninput="fStudentsText(this.value)" style="padding:4px 9px;border:1.5px solid var(--border);border-radius:20px;font-size:11px;direction:rtl;background:#fff;margin-right:auto;width:170px">
           <button class="btn btn-sm btn-ghost admin-only" onclick="document.getElementById('xl-import').click()" title="ייבוא מאקסל">📥 ייבוא מאקסל</button>
           <button class="btn btn-sm btn-ghost admin-only" onclick="openStudentSync()" title="עדכון רשימה מטבלה">🔄 עדכון רשימה</button>
+          <button class="btn btn-sm btn-ghost admin-only" onclick="openDuplicatesModal()" title="בדיקת תלמידים כפולים">🔍 בדוק כפילויות</button>
           <input type="file" id="xl-import" accept=".xlsx,.xls,.csv" style="display:none" onchange="importStudentsExcel(event)">
           <button class="btn btn-sm btn-ghost admin-only" onclick="openPromoteModal()" title="העלאת שכבה לכל בית הספר">🎓 העלאת שכבה</button>
           <button class="btn btn-sm btn-ghost admin-only" onclick="openAddStudent('teacher')">+ מורה / צוות</button>
@@ -1333,6 +1334,24 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
     <div class="modal-footer">
       <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-sync')">ביטול</button>
       <button class="btn btn-primary btn-sm" id="sync-apply-btn" style="display:none" onclick="applyStudentSync()">החל שינויים</button>
+    </div>
+  </div>
+</div>
+
+<!-- Duplicate students checker -->
+<div class="modal-overlay" id="modal-duplicates">
+  <div class="modal" style="width:min(560px,96vw)">
+    <div class="modal-header"><h3>🔍 תלמידים כפולים</h3><button class="modal-close" onclick="closeModal('modal-duplicates')">✕</button></div>
+    <div class="modal-body">
+      <div id="dup-summary" style="font-size:12px;font-weight:700;margin-bottom:10px"></div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        מסומנות לסילוק הרשומות הכפולות (נשארת הרשומה הראשונה בכל קבוצה) — ניתן לשנות את הבחירה לפני המחיקה.
+      </p>
+      <div id="dup-groups-list" style="max-height:340px;overflow-y:auto"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-duplicates')">ביטול</button>
+      <button class="btn btn-danger btn-sm" id="dup-apply-btn" onclick="applyDuplicatesDelete()">🗑 מחק רשומות נבחרות</button>
     </div>
   </div>
 </div>
@@ -2394,6 +2413,82 @@ function bulkDeleteSelected(){
 }
 
 // ════════════════════════════════════════
+//  DUPLICATE STUDENT DETECTION
+// ════════════════════════════════════════
+function findDuplicateStudentGroups(){
+  const normName=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+  const groups={};
+  DB.students.forEach(s=>{
+    const key=normName(s.first+' '+s.last);
+    if(!key)return;
+    (groups[key]=groups[key]||[]).push(s);
+  });
+  return Object.values(groups).filter(g=>g.length>1);
+}
+let dupState=[];
+function openDuplicatesModal(){
+  const groups=findDuplicateStudentGroups();
+  if(!groups.length){alert('לא נמצאו תלמידים כפולים 🎉');return;}
+  dupState=groups.map(g=>({
+    students:g.map((s,i)=>({
+      student:s,
+      checked:i!==0, // default: keep the first (oldest) record, mark the rest for deletion
+      activeLoans:DB.loans.filter(l=>l.studentId===s.id&&(l.status==='active'||l.status==='overdue')).length,
+      totalLoans:DB.loans.filter(l=>l.studentId===s.id).length
+    }))
+  }));
+  renderDuplicatesReview();
+  openModal('modal-duplicates');
+}
+function toggleDupCheck(gi,si,checked){
+  dupState[gi].students[si].checked=checked;
+  updateDupSelectedCount();
+}
+function renderDuplicatesReview(){
+  const el=document.getElementById('dup-groups-list');
+  const totalDup=dupState.reduce((sum,g)=>sum+g.students.length,0);
+  document.getElementById('dup-summary').textContent=`נמצאו ${dupState.length} קבוצות של שמות כפולים (${totalDup} רשומות בסה"כ).`;
+  el.innerHTML=dupState.map((g,gi)=>`
+    <div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;background:var(--surface2)">
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px">${esc(g.students[0].student.first+' '+g.students[0].student.last)}</div>
+      ${g.students.map((it,si)=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px">
+          <input type="checkbox" ${it.checked?'checked':''} onchange="toggleDupCheck(${gi},${si},this.checked)">
+          <span>כיתה: ${esc(it.student.cls||'-')} · כרטיס: ${esc(it.student.card||'-')}</span>
+          <span style="color:var(--muted)">(${it.totalLoans} השאלות סה"כ${it.activeLoans?' · '+it.activeLoans+' פעילות ⚠️':''})</span>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+  updateDupSelectedCount();
+}
+function updateDupSelectedCount(){
+  const cnt=dupState.reduce((sum,g)=>sum+g.students.filter(it=>it.checked).length,0);
+  const btn=document.getElementById('dup-apply-btn');
+  if(btn){
+    btn.textContent=`🗑 מחק ${cnt} רשומות נבחרות`;
+    btn.disabled=cnt===0;
+    btn.style.opacity=cnt===0?.5:1;
+  }
+}
+function applyDuplicatesDelete(){
+  const toDelete=[];
+  dupState.forEach(g=>g.students.forEach(it=>{if(it.checked)toDelete.push(it.student.id);}));
+  if(!toDelete.length)return;
+  const withLoans=toDelete.filter(id=>DB.loans.some(l=>l.studentId===id&&(l.status==='active'||l.status==='overdue')));
+  if(withLoans.length){
+    if(!confirm(withLoans.length+' מהרשומות שנבחרו יש להן ספרים מושאלים עדיין. בכל זאת למחוק?'))return;
+  }else{
+    if(!confirm(`למחוק ${toDelete.length} רשומות כפולות?`))return;
+  }
+  DB.students=DB.students.filter(s=>!toDelete.includes(s.id));
+  addAct(`נוקו ${toDelete.length} רשומות תלמידים כפולות`,'#c0392b');
+  saveDB();
+  closeModal('modal-duplicates');
+  renderStudents();
+}
+
+// ════════════════════════════════════════
 //  PROMOTE GRADE — advance all students by one class level
 // ════════════════════════════════════════
 const GRADE_ORDER=['א','ב','ג','ד','ה','ו','ז','ח'];
@@ -2563,8 +2658,11 @@ function importStudentsExcel(event){
 
         // Skip duplicates (same first+last+class)
         const cls = cClass ? String(row[cClass]||'').trim() : '';
-        const exists = DB.students.find(s =>
-          s.first===first && s.last===last && (!cls || s.cls===cls));
+        // Duplicate check is by name alone (regardless of class) — a student
+        // who moved up a grade since the last import must not be re-added as
+        // a second record just because the class column now differs.
+        const normName=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
+        const exists = DB.students.some(s => normName(s.first+' '+s.last)===normName(first+' '+last));
         if(exists){ skipped++; return; }
 
         DB._ids.student++;
