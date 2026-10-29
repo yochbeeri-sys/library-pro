@@ -838,7 +838,8 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
         <!-- Bulk selection action bar -->
         <div id="bulk-action-bar" style="display:none;align-items:center;gap:10px;background:#fef0e4;border:1.5px solid #f0c090;border-radius:9px;padding:9px 14px;margin-bottom:10px">
           <span style="font-size:13px;font-weight:700;color:#8a3a00">נבחרו <span id="bulk-sel-count">0</span> רשומות</span>
-          <button class="btn btn-sm btn-danger" style="margin-right:auto" onclick="bulkDeleteSelected()">🗑 מחק נבחרים</button>
+          <button class="btn btn-sm btn-primary" style="margin-right:auto" onclick="bulkMakeLibrarians()">📚 הפוך לספרנים</button>
+          <button class="btn btn-sm btn-danger" onclick="bulkDeleteSelected()">🗑 מחק נבחרים</button>
           <button class="btn btn-sm btn-ghost" onclick="clearBulkSelection()">✕ בטל בחירה</button>
         </div>
 
@@ -1462,6 +1463,9 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
   </div>
 </div>
 
+<!-- Global toast notifications (visible from any view) -->
+<div id="global-toast-wrap" style="position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:6px;pointer-events:none"></div>
+
 <!-- Scan Modal -->
 <div id="scan-modal">
   <div class="scan-box"><h3>📷 סריקת ברקוד</h3><p>כוון את המצלמה לברקוד</p>
@@ -1774,21 +1778,29 @@ function logout(){
 let saveTimer=null;
 function saveDB(){
   if(!currentLibRef)return;
-  // Temporarily detach listener to avoid echo
+  // Capture what to save RIGHT NOW, not inside the debounced callback below.
+  // The realtime listener (currentLibRef.on('value',...)) can reassign the
+  // whole DB object at any time — an echo of an earlier write arriving
+  // mid-debounce would otherwise silently overwrite in-memory changes made
+  // here before this callback ever runs, losing them without any save
+  // actually happening (seen with bulk edits: mark many books as "not for
+  // loan", then the change vanishes).
+  const toSave={
+    books:arrToFbObj(DB.books),
+    students:arrToFbObj(DB.students),
+    loans:arrToFbObj(DB.loans),
+    reservations:arrToFbObj(DB.reservations),
+    actLog:DB.actLog.slice(0,50),
+    settings:DB.settings,
+    dutyRoster:DB.dutyRoster,
+    _ids:DB._ids
+  };
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{
-    // Convert arrays to indexed objects for Firebase (Firebase doesn't support arrays well)
-    const toSave={
-      books:arrToFbObj(DB.books),
-      students:arrToFbObj(DB.students),
-      loans:arrToFbObj(DB.loans),
-      reservations:arrToFbObj(DB.reservations),
-      actLog:DB.actLog.slice(0,50),
-      settings:DB.settings,
-      dutyRoster:DB.dutyRoster,
-      _ids:DB._ids
-    };
-    currentLibRef.update(toSave).catch(e=>console.error('Save error:',e));
+    currentLibRef.update(toSave).catch(e=>{
+      console.error('Save error:',e);
+      showToast('⚠️ שמירה נכשלה: '+e.message,'warning');
+    });
   },400);
 }
 function arrToFbObj(arr){
@@ -2705,11 +2717,12 @@ function showStudentDetail(id){
   },0)/returned.length):0;
   const favGroup=loans.reduce((acc,l)=>{const b=DB.books.find(x=>x.id===l.bookId);const g=b?.group?.lbl||'?';acc[g]=(acc[g]||0)+1;return acc;},{});
   const topGroup=Object.entries(favGroup).sort((a,b)=>b[1]-a[1])[0]?.[0]||'---';
+  const maxBooks=getStudentMaxBooks(s);
   document.getElementById('sdet-name').textContent=s.first+' '+s.last+' - '+s.cls;
   document.getElementById('sdet-body').innerHTML=
     '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:14px">'+
     '<div style="text-align:center;padding:9px 5px;background:var(--surface2);border-radius:7px"><div style="font-size:20px;font-weight:900;color:var(--navy)">'+loans.length+'</div><div style="font-size:9px;color:var(--muted)">סה"כ</div></div>'+
-    '<div style="text-align:center;padding:9px 5px;background:var(--surface2);border-radius:7px"><div style="font-size:20px;font-weight:900;color:var(--orange)">'+active.length+'</div><div style="font-size:9px;color:var(--muted)">מושאל</div></div>'+
+    '<div style="text-align:center;padding:9px 5px;background:var(--surface2);border-radius:7px"><div style="font-size:20px;font-weight:900;color:var(--orange)">'+active.length+'/'+maxBooks+'</div><div style="font-size:9px;color:var(--muted)">מושאל / מקסימום</div></div>'+
     '<div style="text-align:center;padding:9px 5px;background:var(--surface2);border-radius:7px"><div style="font-size:14px;font-weight:900;color:var(--green)">'+avgDays+'</div><div style="font-size:9px;color:var(--muted)">ממוצע ימים</div></div>'+
     '<div style="text-align:center;padding:9px 5px;background:var(--surface2);border-radius:7px"><div style="font-size:10px;font-weight:900;color:var(--blue)">'+esc(topGroup)+'</div><div style="font-size:9px;color:var(--muted)">קטגוריה מועדפת</div></div>'+
     '</div>'+
@@ -3107,7 +3120,21 @@ function findCopy(bc){
   }
   return null;
 }
-function showFB(msg,type='success'){const el=document.getElementById('loan-fb');el.innerHTML=`<div class="alert alert-${type}">${msg}</div>`;setTimeout(()=>el.innerHTML='',5000);}
+function showFB(msg,type='success'){const el=document.getElementById('loan-fb');el.innerHTML=`<div class="alert alert-${type}">${msg}</div>`;setTimeout(()=>el.innerHTML='',9000);}
+// Global toast — unlike showFB (tied to the loans view's own feedback
+// slot), this is visible from any view, for feedback on actions that
+// can happen from anywhere (e.g. a background save failing).
+function showToast(msg,type='success',duration=9000){
+  const wrap=document.getElementById('global-toast-wrap');
+  if(!wrap)return;
+  const el=document.createElement('div');
+  el.className='alert alert-'+type;
+  el.style.cssText='pointer-events:auto;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:360px;cursor:pointer';
+  el.innerHTML=msg;
+  el.onclick=()=>el.remove();
+  wrap.appendChild(el);
+  setTimeout(()=>el.remove(),duration);
+}
 function addBookToPrintQueue(id){
   const book=DB.books.find(x=>x.id===id);
   if(!book)return;
@@ -4459,7 +4486,20 @@ document.getElementById('scan-modal').addEventListener('click',e=>{if(e.target==
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
-function globalSearch(v){if(!v||!DB)return;const b=DB.books.find(x=>x.title.includes(v)||x.barcode.includes(v));if(b){bText=v;showView('books',null);document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.querySelectorAll('.view').forEach(v2=>v2.classList.remove('active'));document.getElementById('view-books').classList.add('active');document.getElementById('topbar-title').textContent='ספרים';document.getElementById('bsearch').value=v;renderBooks();}}
+function globalSearch(v){
+  if(!DB)return;
+  // Context-aware: while already on the students view, search students in
+  // place instead of always jumping to a book match in the books view.
+  if(currentView==='students'){
+    sText=v;
+    const ssEl=document.getElementById('ssearch');if(ssEl)ssEl.value=v;
+    renderStudents();
+    return;
+  }
+  if(!v)return;
+  const b=DB.books.find(x=>x.title.includes(v)||x.barcode.includes(v));
+  if(b){bText=v;showView('books',null);document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.querySelectorAll('.view').forEach(v2=>v2.classList.remove('active'));document.getElementById('view-books').classList.add('active');document.getElementById('topbar-title').textContent='ספרים';document.getElementById('bsearch').value=v;renderBooks();}
+}
 
 // ════════════════════════════════════════
 //  INIT
@@ -4565,6 +4605,7 @@ function openAdminModal(){
     document.getElementById('admin-user-email').textContent=currentAdmin.email||currentAdmin.displayName||'מנהל';
     renderAdminList();
     renderLibrarianList();
+    renderLibrarianAccountsList();
   }else{
     document.getElementById('admin-modal-login').style.display='';
     document.getElementById('admin-modal-info').style.display='none';
@@ -4626,6 +4667,7 @@ async function adminSignOut(){
 // ════════════════════════════════════════
 let isLibrarianVerified=false;
 let currentLibrarianName='';
+let currentLibrarianAccountId=''; // set only for password-based (non-Google) librarian sessions
 
 function openLibrarianModal(){
   if(isLibrarianVerified){
@@ -4654,18 +4696,52 @@ async function librarianSignInGoogle(){
     },800);
   }catch(e){msg.style.color='var(--red)';msg.textContent='שגיאה: '+e.message;}
 }
+async function libLoginPassword(){
+  const nameEl=document.getElementById('lib-login-name');
+  const passEl=document.getElementById('lib-login-pass');
+  const msg=document.getElementById('lib-login-msg');
+  const name=nameEl.value.trim();
+  const pass=passEl.value;
+  if(!name||!pass){msg.style.color='var(--red)';msg.textContent='נא למלא שם וסיסמה';return;}
+  if(!currentLibRef){msg.style.color='var(--red)';msg.textContent='שגיאה: לא נבחרה ספרייה';return;}
+  try{
+    const snap=await currentLibRef.child('librarianAccounts').once('value');
+    const accounts=snap.val()||{};
+    const entry=Object.entries(accounts).find(([id,a])=>a.name===name);
+    if(!entry){msg.style.color='var(--red)';msg.textContent='שם או סיסמה שגויים';return;}
+    const [id,acc]=entry;
+    const passHash=await hashPass(pass);
+    if(passHash!==acc.passHash){msg.style.color='var(--red)';msg.textContent='שם או סיסמה שגויים';return;}
+    isLibrarianVerified=true;
+    currentLibrarianName=acc.name;
+    currentLibrarianAccountId=id;
+    updateLibrarianUI();
+    msg.style.color='var(--green)';msg.textContent='✅ התחברת בהצלחה!';
+    passEl.value='';
+    setTimeout(()=>{closeModal('modal-librarian');logLibrarianLogin();},800);
+  }catch(e){msg.style.color='var(--red)';msg.textContent='שגיאה: '+e.message;}
+}
 function logLibrarianLogin(){
-  if(!currentLibRef||!currentAdmin)return;
+  if(!currentLibRef)return;
   currentLibRef.child('librarianLogins').push({
-    email:currentAdmin.email||'',
+    email:currentAdmin?.email||'',
     name:currentLibrarianName||'',
     time:Date.now()
   });
 }
 
 function libSignOut(){
-  adminSignOut();
-  closeModal('modal-librarian');
+  if(currentLibrarianAccountId){
+    // Password-based session — not a Firebase Auth login, so just clear local state.
+    isLibrarianVerified=false;
+    currentLibrarianName='';
+    currentLibrarianAccountId='';
+    updateLibrarianUI();
+    closeModal('modal-librarian');
+  }else{
+    adminSignOut();
+    closeModal('modal-librarian');
+  }
 }
 
 function updateLibrarianUI(){
@@ -4695,7 +4771,7 @@ async function addLibrarianByEmail(){
     msg.style.color='var(--green)';
     emailEl.value='';
     renderLibrarianList();
-    setTimeout(()=>msg.textContent='',3000);
+    setTimeout(()=>msg.textContent='',8000);
   }catch(e){msg.textContent='שגיאה: '+e.message;msg.style.color='var(--red)';}
 }
 
@@ -4738,6 +4814,88 @@ async function removeLibrarianInvite(key){
   if(!confirm('לבטל את ההזמנה?'))return;
   await currentLibRef.child('librarianInvites/'+key).remove();
   renderLibrarianList();
+}
+
+// ── Password-based librarian accounts (name+password, no Google account
+// needed) — for student library helpers who may not have a workable
+// Google account for sign-in. Lives alongside the email-invite system;
+// either can be used to sign in as librarian. ──
+async function hashPass(pass){
+  const enc=new TextEncoder().encode(pass+'lpro_salt_2024');
+  const buf=await crypto.subtle.digest('SHA-256',enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function addLibrarianAccount(){
+  const nameEl=document.getElementById('new-lib-acc-name');
+  const passEl=document.getElementById('new-lib-acc-pass');
+  const msg=document.getElementById('librarian-acc-add-msg');
+  const name=nameEl.value.trim();
+  const pass=passEl.value;
+  if(!name||!pass){msg.textContent='נא למלא שם וסיסמה';msg.style.color='var(--red)';return;}
+  if(pass.length<4){msg.textContent='סיסמה לפחות 4 תווים';msg.style.color='var(--red)';return;}
+  if(!currentLibRef){msg.textContent='שגיאה: לא נבחרה ספרייה';msg.style.color='var(--red)';return;}
+  try{
+    const passHash=await hashPass(pass);
+    const id='lib_'+Date.now();
+    await currentLibRef.child('librarianAccounts/'+id).set({name,passHash,createdAt:Date.now()});
+    msg.textContent='✅ '+name+' נוסף/ה בהצלחה';msg.style.color='var(--green)';
+    nameEl.value='';passEl.value='';
+    renderLibrarianAccountsList();
+    setTimeout(()=>msg.textContent='',8000);
+  }catch(e){msg.textContent='שגיאה: '+e.message;msg.style.color='var(--red)';}
+}
+async function renderLibrarianAccountsList(){
+  const el=document.getElementById('librarian-accounts-list');
+  if(!el||!currentLibRef)return;
+  try{
+    const snap=await currentLibRef.child('librarianAccounts').once('value');
+    const accounts=snap.val()||{};
+    const entries=Object.entries(accounts);
+    if(!entries.length){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:6px;font-size:11px">אין חשבונות עם סיסמה</div>';return;}
+    el.innerHTML=entries.map(([id,a])=>`
+      <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;background:#fff;margin-bottom:3px;border:1px solid var(--border)">
+        <span style="font-size:14px">🔑</span>
+        <span style="flex:1;font-size:12px;font-weight:600">${esc(a.name)}</span>
+        <button onclick="resetLibrarianPassword('${id}')"
+          style="padding:2px 7px;border:none;border-radius:4px;background:var(--navy);color:#fff;font-size:10px;cursor:pointer;font-family:Heebo,sans-serif">איפוס סיסמה</button>
+        <button onclick="removeLibrarianAccount('${id}')"
+          style="padding:2px 7px;border:none;border-radius:4px;background:var(--red);color:#fff;font-size:10px;cursor:pointer;font-family:Heebo,sans-serif">הסר</button>
+      </div>`).join('');
+  }catch(e){el.innerHTML='<div style="color:var(--red);font-size:10px">'+e.message+'</div>';}
+}
+async function resetLibrarianPassword(id){
+  const newPass=prompt('סיסמה חדשה (לפחות 4 תווים):');
+  if(!newPass)return;
+  if(newPass.length<4){alert('סיסמה קצרה מדי');return;}
+  const passHash=await hashPass(newPass);
+  await currentLibRef.child('librarianAccounts/'+id+'/passHash').set(passHash);
+  alert('✅ הסיסמה אופסה. הסיסמה החדשה: '+newPass+'\n(מומלץ להעתיק לפני סגירת החלון — לא ניתן להציג שוב)');
+}
+async function removeLibrarianAccount(id){
+  if(!confirm('להסיר חשבון ספרן/ית זה?'))return;
+  await currentLibRef.child('librarianAccounts/'+id).remove();
+  renderLibrarianAccountsList();
+}
+async function bulkMakeLibrarians(){
+  if(!bulkSelectedIds.size)return;
+  if(!currentLibRef){alert('שגיאה: לא נבחרה ספרייה');return;}
+  const students=DB.students.filter(s=>bulkSelectedIds.has(s.id));
+  const names=students.map(s=>s.first+' '+s.last);
+  const preview=names.slice(0,5).join(', ')+(names.length>5?` ועוד ${names.length-5}...`:'');
+  if(!confirm(`להפוך ${students.length} תלמידים לספרנים?\n\n${preview}\n\nלכל אחד/ת תיווצר סיסמה חדשה (מספר 4 ספרות).`))return;
+  const created=[];
+  for(const s of students){
+    const name=s.first+' '+s.last;
+    const pass=String(Math.floor(1000+Math.random()*9000));
+    const passHash=await hashPass(pass);
+    const id='stu_'+s.id+'_'+Date.now();
+    await currentLibRef.child('librarianAccounts/'+id).set({name,passHash,studentId:s.id,createdAt:Date.now()});
+    created.push({name,pass});
+  }
+  clearBulkSelection();
+  renderLibrarianAccountsList();
+  const summary=created.map(c=>`${c.name}: ${c.pass}`).join('\n');
+  alert(`✅ נוצרו ${created.length} חשבונות ספרן/ית:\n\n${summary}\n\nיש למסור את הסיסמאות לתלמידים — לא ניתן להציג אותן שוב (אפשר לאפס סיסמה בכל עת מפאנל הניהול).`);
 }
 
 function openLibrarianHistory(){
@@ -4818,7 +4976,7 @@ async function addAdminByEmail(){
     msg.textContent='✅ הזמנה נשמרה — '+email+' יקבל הרשאות בכניסה הבאה';
     msg.style.color='var(--green)';
     emailEl.value='';
-    setTimeout(()=>msg.textContent='',3000);
+    setTimeout(()=>msg.textContent='',8000);
   }catch(e){msg.textContent='שגיאה: '+e.message;msg.style.color='var(--red)';}
 }
 
@@ -5513,6 +5671,23 @@ function biDoImport(){
           <button class="btn btn-sm btn-ghost" style="width:100%;justify-content:center;margin-top:8px" onclick="openLibrarianHistory()">📜 היסטוריית כניסות</button>
         </div>
 
+        <!-- Password-based librarian accounts -->
+        <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:12px">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px">🔑 ספרנים עם שם וסיסמה</div>
+          <div id="librarian-accounts-list" style="max-height:120px;overflow-y:auto;margin-bottom:8px;font-size:11px"></div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <input type="text" id="new-lib-acc-name" placeholder="שם"
+              style="padding:5px 8px;border:1.5px solid var(--border);border-radius:5px;font-size:11px">
+            <input type="text" id="new-lib-acc-pass" placeholder="סיסמה"
+              style="padding:5px 8px;border:1.5px solid var(--border);border-radius:5px;font-size:11px">
+          </div>
+          <button class="btn btn-sm btn-primary" style="width:100%;margin-top:6px" onclick="addLibrarianAccount()">+ הוסף/י חשבון ספרן/ית</button>
+          <div id="librarian-acc-add-msg" style="font-size:10px;min-height:14px;margin-top:4px;text-align:center"></div>
+          <div style="font-size:9px;color:var(--muted);margin-top:6px;line-height:1.5">
+            💡 מתאים לתלמידים/ספרנים שאין להם חשבון Google — נכנסים בכפתור "כניסת ספרנ/ית" עם שם וסיסמה
+          </div>
+        </div>
+
         <button class="btn btn-danger btn-sm" style="width:100%;justify-content:center" onclick="adminSignOut()">🔓 התנתק</button>
       </div>
 
@@ -5589,6 +5764,16 @@ function biDoImport(){
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:18px;height:18px">
           כניסה עם Google
         </button>
+        <div style="display:flex;align-items:center;gap:8px;margin:14px 0;color:var(--muted);font-size:11px">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <span>או</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <input type="text" id="lib-login-name" placeholder="שם" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Heebo',sans-serif;font-size:13px">
+          <input type="password" id="lib-login-pass" placeholder="סיסמה" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Heebo',sans-serif;font-size:13px" onkeydown="if(event.key==='Enter')libLoginPassword()">
+          <button class="btn btn-primary btn-sm" onclick="libLoginPassword()">🔑 כניסה עם שם וסיסמה</button>
+        </div>
         <div id="lib-login-msg" style="font-size:11px;color:var(--red);min-height:16px;text-align:center;margin-top:10px"></div>
       </div>
       <div id="librarian-modal-info" style="display:none;text-align:center">
