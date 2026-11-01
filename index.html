@@ -1648,6 +1648,16 @@ function normalizeClass(raw){
   if(num.length===2&&num[0]==='3')num=num[1];
   return 'כיתה '+m[1]+num;
 }
+// Normalized comparison key for student names. Strips invisible Unicode
+// formatting marks (RTL/LTR marks, zero-width chars, BOM) that Excel/Sheets
+// exports of Hebrew text often embed invisibly — two names that look
+// identical on screen can otherwise fail an exact-match comparison and be
+// missed as duplicates.
+function normNameKey(s){
+  return String(s||'')
+    .replace(/[​-‏‪-‮﻿]/g,'')
+    .trim().toLowerCase().replace(/\s+/g,' ');
+}
 const fmtDate=d=>d?new Date(d).toLocaleDateString('he-IL'):'–';
 const todayStr=()=>new Date().toISOString().split('T')[0];
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x.toISOString().split('T')[0];};
@@ -2465,10 +2475,9 @@ function bulkDeleteSelected(){
 //  DUPLICATE STUDENT DETECTION
 // ════════════════════════════════════════
 function findDuplicateStudentGroups(){
-  const normName=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
   const groups={};
   DB.students.forEach(s=>{
-    const key=normName(s.first+' '+s.last);
+    const key=normNameKey(s.first+' '+s.last);
     if(!key)return;
     (groups[key]=groups[key]||[]).push(s);
   });
@@ -2710,8 +2719,7 @@ function importStudentsExcel(event){
         // Duplicate check is by name alone (regardless of class) — a student
         // who moved up a grade since the last import must not be re-added as
         // a second record just because the class column now differs.
-        const normName=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
-        const exists = DB.students.some(s => normName(s.first+' '+s.last)===normName(first+' '+last));
+        const exists = DB.students.some(s => normNameKey(s.first+' '+s.last)===normNameKey(first+' '+last));
         if(exists){ skipped++; return; }
 
         DB._ids.student++;
@@ -2778,14 +2786,13 @@ function compareStudentPaste(){
   const text=document.getElementById('sync-paste-area').value;
   const parsed=parseStudentPasteRows(text);
   if(!parsed.length){alert('לא זוהו שורות תקינות. ודאי שהדבקת לפחות שם אחד.');return;}
-  const normName=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
   const currentStudents=DB.students.filter(s=>(s.role||'student')==='student');
-  const pastedNames=new Set(parsed.map(r=>normName(r.first+' '+r.last)));
-  const existingNames=new Set(currentStudents.map(s=>normName(s.first+' '+s.last)));
+  const pastedNames=new Set(parsed.map(r=>normNameKey(r.first+' '+r.last)));
+  const existingNames=new Set(currentStudents.map(s=>normNameKey(s.first+' '+s.last)));
 
-  syncState.toAdd=parsed.filter(r=>!existingNames.has(normName(r.first+' '+r.last)))
+  syncState.toAdd=parsed.filter(r=>!existingNames.has(normNameKey(r.first+' '+r.last)))
     .map((r,i)=>({...r,_id:i,checked:true}));
-  syncState.toDelete=currentStudents.filter(s=>!pastedNames.has(normName(s.first+' '+s.last)))
+  syncState.toDelete=currentStudents.filter(s=>!pastedNames.has(normNameKey(s.first+' '+s.last)))
     .map(s=>({student:s,checked:false,activeLoans:DB.loans.filter(l=>l.studentId===s.id&&(l.status==='active'||l.status==='overdue')).length}));
 
   renderSyncReview();
