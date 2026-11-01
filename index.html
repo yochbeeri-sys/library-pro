@@ -3447,7 +3447,11 @@ function quickLoan(bookId){
 function getStudentMaxBooks(student){
   const role=student.role||'student';
   if(role==='teacher')return DB.settings.maxBooksTeacher||6;
-  if(student.isHelper)return DB.settings.maxBooksHelper||5;
+  // Extended loan permission is part of what being a librarian means —
+  // every librarian gets it automatically, not just students separately
+  // flagged "library helper".
+  const isLibrarian=DB.librarianStudentIds&&DB.librarianStudentIds.has(student.id);
+  if(student.isHelper||isLibrarian)return DB.settings.maxBooksHelper||5;
   return DB.settings.maxBooks||3;
 }
 function doLoan(){
