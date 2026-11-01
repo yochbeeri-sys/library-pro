@@ -2483,8 +2483,12 @@ function bulkDeleteSelected(){
 function findDuplicateStudentGroups(){
   const groups={};
   DB.students.forEach(s=>{
-    const key=normNameKey(s.first+' '+s.last);
-    if(!key)return;
+    const nameKey=normNameKey(s.first+' '+s.last);
+    if(!nameKey)return;
+    // Include role in the grouping key — a teacher and a student who happen
+    // to share a name are two different people, never a duplicate pair, and
+    // must never be offered for merging/deletion against each other.
+    const key=nameKey+'|'+(s.role||'student');
     (groups[key]=groups[key]||[]).push(s);
   });
   return Object.values(groups).filter(g=>g.length>1);
