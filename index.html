@@ -2632,7 +2632,7 @@ function editStudent(id){
   const phEl=document.getElementById('ms-phone');if(phEl)phEl.value=s.phone||'';
   openModal('modal-student');
 }
-function saveStudent(){
+async function saveStudent(){
   const first=document.getElementById('ms-first').value.trim();
   const last=document.getElementById('ms-last').value.trim();
   if(!first||!last){alert('נא למלא שם מלא');return;}
@@ -2642,18 +2642,47 @@ function saveStudent(){
   const roleText=isTeacher?(document.getElementById('ms-role-txt').value.trim()||'מורה'):'';
   const phone=(document.getElementById('ms-phone')?.value||'').trim();
   const isHelper=!isTeacher&&document.getElementById('ms-helper').checked;
+  const wasHelper=editingStudentId?!!DB.students.find(x=>x.id===editingStudentId)?.isHelper:false;
+  let studentId;
   if(editingStudentId){
     const s=DB.students.find(x=>x.id===editingStudentId);
     s.first=first;s.last=last;s.cls=cls;s.role=role;s.roleText=roleText;s.isHelper=isHelper;
     if(phone)s.phone=phone;
+    studentId=editingStudentId;
   }else{
     DB._ids.student++;
     const prefix=isTeacher?'T':'S';
-    DB.students.push({id:DB._ids.student,first,last,cls,role,roleText,phone,isHelper,
+    studentId=DB._ids.student;
+    DB.students.push({id:studentId,first,last,cls,role,roleText,phone,isHelper,
       card:prefix+DB._ids.student,debt:0});
     addAct(`${isTeacher?'מורה/צוות':'תלמיד'} חדש: ${first} ${last}`,isTeacher?'#27ae60':'#2980b9');
   }
   saveDB();closeModal('modal-student');
+
+  // "עוזר/ת ספרייה" and "ספרן/ית" are the same role in the admin's mental
+  // model (confirmed directly — checking this box was expected to also grant
+  // login access, same as the dedicated librarian picker/bulk-convert flow).
+  // So newly checking it also provisions a password-based librarian account,
+  // unless this student already has one.
+  if(isHelper&&!wasHelper&&currentLibRef){
+    try{
+      const snap=await currentLibRef.child('librarianAccounts').once('value');
+      const accounts=snap.val()||{};
+      const already=Object.values(accounts).some(a=>a.studentId===studentId);
+      if(!already){
+        const name=first+' '+last;
+        const pass=String(Math.floor(1000+Math.random()*9000));
+        const passHash=await hashPass(pass);
+        const id='stu_'+studentId+'_'+Date.now();
+        await currentLibRef.child('librarianAccounts/'+id).set({name,passHash,studentId,createdAt:Date.now()});
+        renderLibrarianAccountsList();
+        alert(`✅ נוצר גם חשבון כניסה לספרן/ית עבור ${name}:\n\nסיסמה: ${pass}\n\n(אפשר לאפס בכל עת מפאנל הניהול, תחת "🔑 ספרנים עם שם וסיסמה")`);
+      }
+    }catch(e){
+      console.error('Failed to auto-create librarian account:',e);
+      if(typeof showToast==='function')showToast('⚠️ סומן כעוזר/ת ספרייה אך לא ניתן היה ליצור חשבון כניסה אוטומטית: '+e.message,'warning');
+    }
+  }
 }
 function importStudentsExcel(event){
   const file = event.target.files[0];
@@ -5060,17 +5089,27 @@ async function bulkMakeLibrarians(){
   if(!bulkSelectedIds.size)return;
   if(!currentLibRef){alert('שגיאה: לא נבחרה ספרייה');return;}
   const students=DB.students.filter(s=>bulkSelectedIds.has(s.id));
+  if(!students.length){alert('שגיאה: לא נמצאו תלמידים תואמים לבחירה');return;}
   const names=students.map(s=>s.first+' '+s.last);
   const preview=names.slice(0,5).join(', ')+(names.length>5?` ועוד ${names.length-5}...`:'');
   if(!confirm(`להפוך ${students.length} תלמידים לספרנים?\n\n${preview}\n\nלכל אחד/ת תיווצר סיסמה חדשה (מספר 4 ספרות).`))return;
   const created=[];
-  for(const s of students){
-    const name=s.first+' '+s.last;
-    const pass=String(Math.floor(1000+Math.random()*9000));
-    const passHash=await hashPass(pass);
-    const id='stu_'+s.id+'_'+Date.now();
-    await currentLibRef.child('librarianAccounts/'+id).set({name,passHash,studentId:s.id,createdAt:Date.now()});
-    created.push({name,pass});
+  try{
+    for(const s of students){
+      const name=s.first+' '+s.last;
+      const pass=String(Math.floor(1000+Math.random()*9000));
+      const passHash=await hashPass(pass);
+      const id='stu_'+s.id+'_'+Date.now();
+      await currentLibRef.child('librarianAccounts/'+id).set({name,passHash,studentId:s.id,createdAt:Date.now()});
+      created.push({name,pass});
+    }
+  }catch(e){
+    console.error('bulkMakeLibrarians failed:',e);
+    const summary=created.map(c=>`${c.name}: ${c.pass}`).join('\n');
+    alert('⚠️ שגיאה ביצירת החשבונות: '+e.message+(created.length?`\n\nנוצרו בהצלחה ${created.length} מתוך ${students.length} לפני השגיאה:\n${summary}`:''));
+    clearBulkSelection();
+    renderLibrarianAccountsList();
+    return;
   }
   clearBulkSelection();
   renderLibrarianAccountsList();
