@@ -1641,7 +1641,12 @@ function normalizeClass(raw){
   if(!orig||orig==='צוות')return orig;
   const stripped=orig.replace(/^כיתה\s*/,'').trim();
   const m=stripped.match(/^([אבגדהוזח])[\s'׳\-]*(\d{1,2})$/);
-  return m?('כיתה '+m[1]+m[2]):orig;
+  if(!m)return orig;
+  let num=m[2];
+  // Some exports encode the classroom number with a spurious leading "3"
+  // (e.g. "ג31"/"ד31" really mean "ג1"/"ד1") — strip it.
+  if(num.length===2&&num[0]==='3')num=num[1];
+  return 'כיתה '+m[1]+num;
 }
 const fmtDate=d=>d?new Date(d).toLocaleDateString('he-IL'):'–';
 const todayStr=()=>new Date().toISOString().split('T')[0];
