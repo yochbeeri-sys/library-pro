@@ -830,6 +830,7 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
           <button class="btn btn-sm btn-ghost admin-only" onclick="document.getElementById('xl-import').click()" title="ייבוא מאקסל">📥 ייבוא מאקסל</button>
           <button class="btn btn-sm btn-ghost admin-only" onclick="openStudentSync()" title="עדכון רשימה מטבלה">🔄 עדכון רשימה</button>
           <button class="btn btn-sm btn-ghost admin-only" onclick="openDuplicatesModal()" title="בדיקת תלמידים כפולים">🔍 בדוק כפילויות</button>
+          <button class="btn btn-sm btn-ghost admin-only" onclick="openLibrarianPicker()" title="בחירת תלמידים לתפקיד ספרן/ית">📚 הגדר ספרנים מתלמידים</button>
           <input type="file" id="xl-import" accept=".xlsx,.xls,.csv" style="display:none" onchange="importStudentsExcel(event)">
           <button class="btn btn-sm btn-ghost admin-only" onclick="openPromoteModal()" title="העלאת שכבה לכל בית הספר">🎓 העלאת שכבה</button>
           <button class="btn btn-sm btn-ghost admin-only" onclick="openAddStudent('teacher')">+ מורה / צוות</button>
@@ -1136,6 +1137,16 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
       </div>
       <div id="mb-step3" style="display:none">
 
+        <!-- ── Duplicate details from an existing book (for adding a series easily) ── -->
+        <div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1.5px dashed var(--border);border-radius:9px;padding:9px 13px;margin-bottom:10px">
+          <span style="font-size:16px">📋</span>
+          <div style="flex:1">
+            <input type="text" id="mb-dup-from" placeholder="שכפל פרטים מספר קיים (מחבר, סדרה, קטע, מדף, נושא...) — הקלד שם ספר" list="mb-dup-from-list" autocomplete="off" style="width:100%">
+            <datalist id="mb-dup-from-list"></datalist>
+          </div>
+          <button type="button" class="btn btn-sm btn-ghost" onclick="mbDuplicateFrom()">שכפל ←</button>
+        </div>
+
         <!-- ── Auto-fill bar ── -->
         <div id="mb-autofill-bar" style="display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,#eef2ff,#f5f0ff);border:1.5px solid #c7d2fe;border-radius:9px;padding:9px 13px;margin-bottom:13px">
           <span style="font-size:16px">🌐</span>
@@ -1352,6 +1363,23 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
     <div class="modal-footer">
       <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-duplicates')">ביטול</button>
       <button class="btn btn-danger btn-sm" id="dup-apply-btn" onclick="applyDuplicatesDelete()">🗑 מחק רשומות נבחרות</button>
+    </div>
+  </div>
+</div>
+
+<!-- Librarian picker — select students to turn into librarian accounts -->
+<div class="modal-overlay" id="modal-lib-picker">
+  <div class="modal" style="width:min(520px,96vw)">
+    <div class="modal-header"><h3>📚 הגדרת ספרנים מתלמידים</h3><button class="modal-close" onclick="closeModal('modal-lib-picker')">✕</button></div>
+    <div class="modal-body">
+      <input type="text" id="lib-picker-search" placeholder="חיפוש תלמיד/ה..." oninput="renderLibrarianPickerList()"
+        style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;margin-bottom:10px;box-sizing:border-box">
+      <div id="lib-picker-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:7px"></div>
+      <div id="lib-picker-count" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-lib-picker')">ביטול</button>
+      <button class="btn btn-primary btn-sm" onclick="applyLibrarianPicker()">📚 הפוך לספרנים</button>
     </div>
   </div>
 </div>
@@ -1604,6 +1632,17 @@ let GROUPS=[
 const LIB_COLORS=['#0f2744','#1a6e3a','#7a1a1a','#4a2a7a','#7a4a00','#1a5a6a','#2a5a7a','#5a3a00'];
 const LIB_ICONS=['📚','🏫','📖','🌟','🦁','🌈','🔑','🏆'];
 const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// Canonicalize a class string to "כיתה <letter><number>" (e.g. "כיתה ה1"),
+// regardless of how it was typed/imported — "ה1", "ה 1", "ה'1", "כיתה ה 1"
+// etc. all collapse to the same string, so filters/grouping/dedup treat them
+// as one class instead of silently fragmenting into look-alike duplicates.
+function normalizeClass(raw){
+  const orig=String(raw||'').trim();
+  if(!orig||orig==='צוות')return orig;
+  const stripped=orig.replace(/^כיתה\s*/,'').trim();
+  const m=stripped.match(/^([אבגדהוזח])[\s'׳\-]*(\d{1,2})$/);
+  return m?('כיתה '+m[1]+m[2]):orig;
+}
 const fmtDate=d=>d?new Date(d).toLocaleDateString('he-IL'):'–';
 const todayStr=()=>new Date().toISOString().split('T')[0];
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x.toISOString().split('T')[0];};
@@ -1744,12 +1783,11 @@ function enterLibrary(id){
       },
       _ids:val._ids||{book:100,student:1000,loan:1,res:1}
     };
-    // Migrate old class format ("ג1" → "כיתה ג1") and save
+    // Migrate/normalize class format ("ג1", "ג 1", "ג'1"... → "כיתה ג1") and save
     let migrated=false;
     DB.students.forEach(s=>{
-      if(s.cls&&s.cls!=='צוות'&&!/^כיתה /.test(s.cls)&&/^[אבגדהוזח]/.test(s.cls)){
-        s.cls='כיתה '+s.cls;migrated=true;
-      }
+      const norm=normalizeClass(s.cls);
+      if(norm!==s.cls){s.cls=norm;migrated=true;}
     });
     // Add dateAdded to books that don't have it (use today as fallback)
     const today=todayStr();
@@ -2085,6 +2123,8 @@ function openAddBookModal(){
   const s=document.getElementById('mb-autofill-status');if(s)s.style.display='none';
   const sb=document.getElementById('mb-sec-auto-badge');if(sb)sb.style.display='none';
   const shb=document.getElementById('mb-shelf-auto-badge');if(shb)shb.style.display='none';
+  const dupEl=document.getElementById('mb-dup-from');if(dupEl)dupEl.value='';
+  mbDuplicateFromPopulate();
   openModal('modal-book');
 }
 function editBook(id){
@@ -2106,6 +2146,8 @@ function editBook(id){
   const nlEl=document.getElementById('mb-f-noloan');if(nlEl)nlEl.checked=!!b.noLoan;
   if(b.cover){const p=document.getElementById('mb-cover-prev');p.innerHTML='';p.style.cssText='';const img=document.createElement('img');img.src=b.cover;img.style.cssText='width:130px;height:175px;object-fit:cover;border-radius:7px';p.appendChild(img);coverB64=b.cover;}
   const grp=GROUPS.find(g=>g.id===b.group?.id)||GROUPS[0];initGroupGrid('mb-grp-grid',grp);mbGrp=grp;
+  const dupEl=document.getElementById('mb-dup-from');if(dupEl)dupEl.value='';
+  mbDuplicateFromPopulate();
   openModal('modal-book');
 }
 function setStep(n){if(n===2){setTimeout(()=>{initSubjectPicker&&initSubjectPicker();renderTagChips&&renderTagChips();},50);}
@@ -2183,6 +2225,8 @@ function goManual(){
   mbLocationManual=false;
   clearSubjectPicker();
   const s=document.getElementById('mb-autofill-status');if(s)s.style.display='none';
+  const dupEl=document.getElementById('mb-dup-from');if(dupEl)dupEl.value='';
+  mbDuplicateFromPopulate();
   setStep(2);
 }
 function renderISBN(books){
@@ -2668,7 +2712,7 @@ function importStudentsExcel(event){
         DB._ids.student++;
         const card = cCard && row[cCard] ? String(row[cCard]).trim() : 'S'+DB._ids.student;
         DB.students.push({id:DB._ids.student, first, last,
-          cls: cls || 'א1', card, debt:0});
+          cls: normalizeClass(cls) || 'כיתה א1', card, debt:0});
         added++;
       });
 
@@ -2712,7 +2756,7 @@ function parseStudentPasteRows(text){
     if(cells.length>=3){nameRaw=(cells[0]+' '+cells[1]).trim();cls=cells[2]||'';}
     else{nameRaw=cells[0]||'';cls=cells[1]||'';}
     const parts=nameRaw.trim().split(/\s+/).filter(Boolean);
-    return{first:parts[0]||'',last:parts.slice(1).join(' '),cls:cls.trim()};
+    return{first:parts[0]||'',last:parts.slice(1).join(' '),cls:normalizeClass(cls)};
   }).filter(r=>r.first);
 }
 function openStudentSync(){
@@ -4309,6 +4353,32 @@ function addCopyToBook(id){
   alert('✅ עותק '+n+' נוסף לספר "'+b.title+'"');
 }
 
+function mbDuplicateFromPopulate(){
+  const dl=document.getElementById('mb-dup-from-list');
+  if(dl&&DB)dl.innerHTML=DB.books.map(b=>`<option value="${esc(b.title)}">`).join('');
+}
+function mbDuplicateFrom(){
+  const inp=document.getElementById('mb-dup-from');
+  const q=inp.value.trim();
+  if(!q){mbShowFillStatus('warning','הקלד שם ספר קיים לשכפול ממנו');return;}
+  const ref=DB.books.find(b=>b.title===q&&b.id!==editingBookId)||DB.books.find(b=>b.title.includes(q)&&b.id!==editingBookId);
+  if(!ref){mbShowFillStatus('error','לא נמצא ספר תואם בקטלוג');return;}
+  const filled=[];
+  if(ref.author){document.getElementById('mb-f-author').value=ref.author;filled.push('מחבר');}
+  if(ref.section){document.getElementById('mb-f-sec').value=ref.section;mbLocationManual=true;document.getElementById('mb-sec-auto-badge').style.display='none';filled.push('קטע');}
+  if(ref.shelf){document.getElementById('mb-f-shelf').value=ref.shelf;document.getElementById('mb-shelf-auto-badge').style.display='none';filled.push('מדף');}
+  if(ref.subject){loadSubjectsFromBook(ref.subject);filled.push('נושא');}
+  if(ref.tags?.length){loadTagsFromBook(ref.tags);filled.push('תגיות');}
+  if(ref.group){const grp=GROUPS.find(g=>g.id===ref.group.id);if(grp){initGroupGrid('mb-grp-grid',grp);mbGrp=grp;filled.push('קבוצת גיל');}}
+  if(ref.series){
+    document.getElementById('mb-f-series').value=ref.series;
+    const maxNum=Math.max(0,...DB.books.filter(b=>(b.series||'')===ref.series).map(b=>b.seriesNum||0));
+    document.getElementById('mb-f-series-num').value=maxNum+1;
+    filled.push('סדרה ('+'מספר '+(maxNum+1)+' בתור)');
+  }
+  inp.value='';
+  mbShowFillStatus('success','📋 שוכפל מ"'+ref.title+'": '+filled.join(', '));
+}
 async function mbAutoFill(){
   const title=document.getElementById('mb-f-title').value.trim();
   if(!title){mbShowFillStatus('warning','הכנס שם ספר תחילה');return;}
@@ -4994,6 +5064,67 @@ async function bulkMakeLibrarians(){
   renderLibrarianAccountsList();
   const summary=created.map(c=>`${c.name}: ${c.pass}`).join('\n');
   alert(`✅ נוצרו ${created.length} חשבונות ספרן/ית:\n\n${summary}\n\nיש למסור את הסיסמאות לתלמידים — לא ניתן להציג אותן שוב (אפשר לאפס סיסמה בכל עת מפאנל הניהול).`);
+}
+
+// ── Dedicated librarian picker — a standalone, always-visible entry point
+// for designating students as librarians (doesn't require first using the
+// checkbox/bulk-select-bar flow in the students table). Reuses bulkMakeLibrarians().
+let libPickerSelected=new Set();
+let libPickerExistingNames=null;
+async function openLibrarianPicker(){
+  libPickerSelected=new Set();
+  libPickerExistingNames=null;
+  const searchEl=document.getElementById('lib-picker-search');if(searchEl)searchEl.value='';
+  await renderLibrarianPickerList();
+  openModal('modal-lib-picker');
+}
+async function renderLibrarianPickerList(){
+  const el=document.getElementById('lib-picker-list');
+  if(!el)return;
+  if(!libPickerExistingNames){
+    libPickerExistingNames=new Set();
+    try{
+      if(currentLibRef){
+        const snap=await currentLibRef.child('librarianAccounts').once('value');
+        const accounts=snap.val()||{};
+        Object.values(accounts).forEach(a=>libPickerExistingNames.add(a.name));
+      }
+    }catch(e){/* leave empty — non-fatal */}
+  }
+  const q=(document.getElementById('lib-picker-search')?.value||'').trim().toLowerCase();
+  const list=DB.students.filter(s=>{
+    if((s.role||'student')==='teacher')return false;
+    if(q&&!((s.first+' '+s.last).toLowerCase().includes(q)))return false;
+    return true;
+  }).sort((a,b)=>(a.first+a.last).localeCompare(b.first+b.last,'he'));
+  if(!list.length){el.innerHTML='<div style="padding:12px;text-align:center;color:var(--muted);font-size:11px">לא נמצאו תלמידים</div>';return;}
+  el.innerHTML=list.map(s=>{
+    const name=s.first+' '+s.last;
+    const isLib=libPickerExistingNames.has(name);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px">
+      <input type="checkbox" ${libPickerSelected.has(s.id)?'checked':''} ${isLib?'disabled':''} onchange="toggleLibPicker(${s.id},this.checked)">
+      <span style="flex:1">${esc(name)}</span>
+      <span style="font-size:10px;color:var(--muted)">${esc(s.cls||'')}</span>
+      ${isLib?'<span style="font-size:9px;color:var(--green);font-weight:700">כבר ספרן/ית ✓</span>':''}
+    </div>`;
+  }).join('');
+  updateLibPickerCount();
+}
+function toggleLibPicker(id,checked){
+  if(checked)libPickerSelected.add(id);else libPickerSelected.delete(id);
+  updateLibPickerCount();
+}
+function updateLibPickerCount(){
+  const el=document.getElementById('lib-picker-count');
+  if(el)el.textContent=libPickerSelected.size?`נבחרו ${libPickerSelected.size} תלמידים`:'';
+}
+async function applyLibrarianPicker(){
+  if(!libPickerSelected.size){alert('לא נבחרו תלמידים');return;}
+  bulkSelectedIds=new Set(libPickerSelected);
+  await bulkMakeLibrarians();
+  libPickerSelected=new Set();
+  libPickerExistingNames=null;
+  closeModal('modal-lib-picker');
 }
 
 function openLibrarianHistory(){
