@@ -1042,9 +1042,10 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
                 <div class="field"><label>מקסימום ספרים (תלמיד רגיל)</label><input type="number" id="set-max" value="3" min="1" max="20" onchange="saveSettings()"></div>
               </div>
               <div class="cols2">
-                <div class="field"><label>מקסימום ספרים (עוזר/ת ספרייה)</label><input type="number" id="set-max-helper" value="5" min="1" max="20" onchange="saveSettings()"></div>
+                <div class="field"><label>מקסימום ספרים (עוזר/ת ספרייה — כיתות ג-ד)</label><input type="number" id="set-max-helper" value="3" min="1" max="20" onchange="saveSettings()"></div>
                 <div class="field"><label>מקסימום ספרים (מורה / צוות)</label><input type="number" id="set-max-teacher" value="6" min="1" max="20" onchange="saveSettings()"></div>
               </div>
+              <div class="field"><label>מקסימום ספרים (ספרן/ית)</label><input type="number" id="set-max-librarian" value="4" min="1" max="20" onchange="saveSettings()"></div>
               <div class="field"><label>קוד גישה חדש (4 ספרות)</label><input type="number" id="set-pin" placeholder="השאר ריק לאין שינוי" min="1000" max="9999"></div>
               <button class="btn btn-primary btn-sm" onclick="saveSettingsManual()">שמור הגדרות</button>
             </div>
@@ -1288,7 +1289,7 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
     <div class="field" id="ms-helper-wrap" style="margin-bottom:12px">
       <label style="display:flex;align-items:center;gap:7px;padding:8px 12px;border:2px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">
         <input type="checkbox" id="ms-helper" style="accent-color:var(--purple)">
-        📚 עוזר/ת ספרייה (הרשאת השאלה מורחבת)
+        📚 עוזר/ת ספרייה (כיתות ג-ד — הרשאת השאלה מורחבת בלבד, ללא הרשאת השאלה/החזרה)
       </label>
     </div>
     <div class="cols2">
@@ -1679,7 +1680,7 @@ const FB_CONFIG = {
 let fbApp = null, fbDb = null, fbAuth = null;
 let currentAdmin = null; // Firebase auth user when admin is logged in
 let currentLibId=null, currentLibRef=null;
-let DB={books:[],students:[],loans:[],reservations:[],actLog:[],settings:{school:'',loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},dutyRoster:{rows:['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],cells:{}},_ids:{book:100,student:1000,loan:1,res:1}};
+let DB={books:[],students:[],loans:[],reservations:[],actLog:[],settings:{school:'',loanDays:14,maxBooks:2,maxBooksTeacher:6,maxBooksHelper:3,maxBooksLibrarian:4,logo:null},dutyRoster:{rows:['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],cells:{}},_ids:{book:100,student:1000,loan:1,res:1}};
 let unsubscribe=null;
 // ═══ ALL STATE VARS UP TOP (prevents TDZ errors) ═══
 let libraries=[];
@@ -1734,7 +1735,7 @@ function createLibrary(){
   if(!name||!pin||pin.length!==4||isNaN(pin)){alert('נא למלא שם וקוד גישה (4 ספרות)');return;}
   const id='lib_'+Date.now();
   const meta={name,school,color:nlColor,icon:nlIcon,pin};
-  const emptyData={books:{},students:{},loans:{},reservations:{},actLog:[],settings:{school:school||name,loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},dutyRoster:{rows:['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],cells:{}},_ids:{book:100,student:1000,loan:1,res:1}};
+  const emptyData={books:{},students:{},loans:{},reservations:{},actLog:[],settings:{school:school||name,loanDays:14,maxBooks:2,maxBooksTeacher:6,maxBooksHelper:3,maxBooksLibrarian:4,logo:null},dutyRoster:{rows:['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],cells:{}},_ids:{book:100,student:1000,loan:1,res:1}};
   fbDb.ref('libraries/'+id).set({meta,data:emptyData}).then(()=>{
     libraries.push({id,...meta});
     backToLibList();
@@ -1791,7 +1792,7 @@ function enterLibrary(id){
       loans:fbArrToArr(val.loans),
       reservations:fbArrToArr(val.reservations),
       actLog:Array.isArray(val.actLog)?val.actLog:(val.actLog?Object.values(val.actLog):[]),
-      settings:val.settings||{school:'',loanDays:14,maxBooks:3,maxBooksTeacher:6,maxBooksHelper:5,logo:null},
+      settings:val.settings||{school:'',loanDays:14,maxBooks:2,maxBooksTeacher:6,maxBooksHelper:3,maxBooksLibrarian:4,logo:null},
       dutyRoster:{
         rows:(val.dutyRoster&&val.dutyRoster.rows)||['שעה 1','שעה 2','הפסקה גדולה','שעה 4'],
         cells:(val.dutyRoster&&val.dutyRoster.cells)||{}
@@ -1910,9 +1911,10 @@ function refreshCurrentView(){
   if(currentView==='settings'){
     document.getElementById('set-school').value=DB.settings.school||'';
     document.getElementById('set-days').value=DB.settings.loanDays||14;
-    document.getElementById('set-max').value=DB.settings.maxBooks||3;
-    document.getElementById('set-max-helper').value=DB.settings.maxBooksHelper||5;
+    document.getElementById('set-max').value=DB.settings.maxBooks||2;
+    document.getElementById('set-max-helper').value=DB.settings.maxBooksHelper||3;
     document.getElementById('set-max-teacher').value=DB.settings.maxBooksTeacher||6;
+    document.getElementById('set-max-librarian').value=DB.settings.maxBooksLibrarian||4;
     if(DB.settings.logo)document.getElementById('logo-disp').innerHTML=`<img src="${DB.settings.logo}" style="max-height:40px;display:block;margin:0 auto 2px"><div style="font-size:10px;color:var(--muted)">לחץ להחלפה</div>`;
     loadCustomGroups();
     renderGroupsList();
@@ -2642,7 +2644,7 @@ function editStudent(id){
   const phEl=document.getElementById('ms-phone');if(phEl)phEl.value=s.phone||'';
   openModal('modal-student');
 }
-async function saveStudent(){
+function saveStudent(){
   const first=document.getElementById('ms-first').value.trim();
   const last=document.getElementById('ms-last').value.trim();
   if(!first||!last){alert('נא למלא שם מלא');return;}
@@ -2651,48 +2653,23 @@ async function saveStudent(){
   const cls=isTeacher?'צוות':document.getElementById('ms-cls').value;
   const roleText=isTeacher?(document.getElementById('ms-role-txt').value.trim()||'מורה'):'';
   const phone=(document.getElementById('ms-phone')?.value||'').trim();
+  // "עוזר/ת ספרייה" (כיתות ג-ד) is a loan-limit tier only — extended loan
+  // permission with NO loan/return permission. It's a separate concept from
+  // being a librarian (password login + loan/return/add-book permissions,
+  // granted only via the dedicated librarian picker/bulk-convert flow).
   const isHelper=!isTeacher&&document.getElementById('ms-helper').checked;
-  const wasHelper=editingStudentId?!!DB.students.find(x=>x.id===editingStudentId)?.isHelper:false;
-  let studentId;
   if(editingStudentId){
     const s=DB.students.find(x=>x.id===editingStudentId);
     s.first=first;s.last=last;s.cls=cls;s.role=role;s.roleText=roleText;s.isHelper=isHelper;
     if(phone)s.phone=phone;
-    studentId=editingStudentId;
   }else{
     DB._ids.student++;
     const prefix=isTeacher?'T':'S';
-    studentId=DB._ids.student;
-    DB.students.push({id:studentId,first,last,cls,role,roleText,phone,isHelper,
+    DB.students.push({id:DB._ids.student,first,last,cls,role,roleText,phone,isHelper,
       card:prefix+DB._ids.student,debt:0});
     addAct(`${isTeacher?'מורה/צוות':'תלמיד'} חדש: ${first} ${last}`,isTeacher?'#27ae60':'#2980b9');
   }
   saveDB();closeModal('modal-student');
-
-  // "עוזר/ת ספרייה" and "ספרן/ית" are the same role in the admin's mental
-  // model (confirmed directly — checking this box was expected to also grant
-  // login access, same as the dedicated librarian picker/bulk-convert flow).
-  // So newly checking it also provisions a password-based librarian account,
-  // unless this student already has one.
-  if(isHelper&&!wasHelper&&currentLibRef){
-    try{
-      const snap=await currentLibRef.child('librarianAccounts').once('value');
-      const accounts=snap.val()||{};
-      const already=Object.values(accounts).some(a=>a.studentId===studentId);
-      if(!already){
-        const name=first+' '+last;
-        const pass=String(Math.floor(1000+Math.random()*9000));
-        const passHash=await hashPass(pass);
-        const id='stu_'+studentId+'_'+Date.now();
-        await currentLibRef.child('librarianAccounts/'+id).set({name,passHash,studentId,createdAt:Date.now()});
-        renderLibrarianAccountsList();
-        alert(`✅ נוצר גם חשבון כניסה לספרן/ית עבור ${name}:\n\nסיסמה: ${pass}\n\n(אפשר לאפס בכל עת מפאנל הניהול, תחת "🔑 ספרנים עם שם וסיסמה")`);
-      }
-    }catch(e){
-      console.error('Failed to auto-create librarian account:',e);
-      if(typeof showToast==='function')showToast('⚠️ סומן כעוזר/ת ספרייה אך לא ניתן היה ליצור חשבון כניסה אוטומטית: '+e.message,'warning');
-    }
-  }
 }
 function importStudentsExcel(event){
   const file = event.target.files[0];
@@ -3447,12 +3424,13 @@ function quickLoan(bookId){
 function getStudentMaxBooks(student){
   const role=student.role||'student';
   if(role==='teacher')return DB.settings.maxBooksTeacher||6;
-  // Extended loan permission is part of what being a librarian means —
-  // every librarian gets it automatically, not just students separately
-  // flagged "library helper".
+  // Librarian (password login + loan/return/add-book permissions) and
+  // "עוזר/ת ספרייה" (כיתות ג-ד — extended loan limit only, no permissions)
+  // are separate tiers; librarian takes priority if somehow both apply.
   const isLibrarian=DB.librarianStudentIds&&DB.librarianStudentIds.has(student.id);
-  if(student.isHelper||isLibrarian)return DB.settings.maxBooksHelper||5;
-  return DB.settings.maxBooks||3;
+  if(isLibrarian)return DB.settings.maxBooksLibrarian||4;
+  if(student.isHelper)return DB.settings.maxBooksHelper||3;
+  return DB.settings.maxBooks||2;
 }
 function doLoan(){
   const sVal=document.getElementById('loan-s').value;
@@ -4175,7 +4153,7 @@ function refreshGroupChips(){
   initGroupGrid('lbl-grp-grid',GROUPS[0]);
 }
 
-function saveSettings(){if(!DB||!currentLibId)return;DB.settings.school=document.getElementById('set-school').value;DB.settings.loanDays=parseInt(document.getElementById('set-days').value)||14;DB.settings.maxBooks=parseInt(document.getElementById('set-max').value)||3;DB.settings.maxBooksHelper=parseInt(document.getElementById('set-max-helper').value)||5;DB.settings.maxBooksTeacher=parseInt(document.getElementById('set-max-teacher').value)||6;document.getElementById('sb-school-name').textContent=DB.settings.school;saveDB();}
+function saveSettings(){if(!DB||!currentLibId)return;DB.settings.school=document.getElementById('set-school').value;DB.settings.loanDays=parseInt(document.getElementById('set-days').value)||14;DB.settings.maxBooks=parseInt(document.getElementById('set-max').value)||2;DB.settings.maxBooksHelper=parseInt(document.getElementById('set-max-helper').value)||3;DB.settings.maxBooksTeacher=parseInt(document.getElementById('set-max-teacher').value)||6;DB.settings.maxBooksLibrarian=parseInt(document.getElementById('set-max-librarian').value)||4;document.getElementById('sb-school-name').textContent=DB.settings.school;saveDB();}
 function saveSettingsManual(){saveSettings();const np=document.getElementById('set-pin').value.trim();if(np&&np.length===4&&!isNaN(np)){const lib=libraries.find(l=>l.id===currentLibId);if(lib){lib.pin=np;fbDb.ref('libraries/'+currentLibId+'/meta/pin').set(np);document.getElementById('set-pin').value='';}}alert('הגדרות נשמרו בענן ✓');}
 function loadLogo(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{DB.settings.logo=ev.target.result;saveDB();document.getElementById('logo-disp').innerHTML=`<img src="${DB.settings.logo}" style="max-height:40px;display:block;margin:0 auto 2px"><div style="font-size:10px;color:var(--muted)">לחץ להחלפה</div>`;};r.readAsDataURL(f);}
 function exportData(){const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='library_backup.json';a.click();}
