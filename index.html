@@ -1798,6 +1798,10 @@ function enterLibrary(id){
       },
       _ids:val._ids||{book:100,student:1000,loan:1,res:1}
     };
+    // Which students have a password-based librarian account — kept in sync
+    // here (realtime, like everything else in DB) so the students table can
+    // show a "ספרן/ית" badge without a separate async fetch.
+    DB.librarianStudentIds=new Set(Object.values(val.librarianAccounts||{}).map(a=>a.studentId).filter(id=>id!=null));
     // Migrate/normalize class format ("ג1", "ג 1", "ג'1"... → "כיתה ג1") and save
     let migrated=false;
     DB.students.forEach(s=>{
@@ -2388,9 +2392,11 @@ function renderStudents(){
     const al=DB.loans.filter(l=>(l.status==='active'||l.status==='overdue')&&l.studentId===s.id).length;
     const tl=DB.loans.filter(l=>l.studentId===s.id).length;
     const isTeacher=(s.role||'student')==='teacher';
-    const roleBadge=isTeacher
+    const isLibAcc=DB.librarianStudentIds&&DB.librarianStudentIds.has(s.id);
+    const libBadge=isLibAcc?`<span class="badge" style="background:#eef2ff;color:#4f46e5;font-size:9px;margin-right:4px">🔑 ספרן/ית</span>`:'';
+    const roleBadge=(isTeacher
       ?`<span class="badge" style="background:#e8f9ef;color:var(--green);font-size:9px;margin-right:4px">👩‍🏫 ${esc(s.roleText||'מורה')}</span>`
-      :`<span class="badge badge-blue" style="font-size:9px">${esc(s.cls||'')}</span>${s.isHelper?`<span class="badge" style="background:#f3e8fd;color:#8e44ad;font-size:9px;margin-right:4px">📚 עוזר/ת ספרייה</span>`:''}`;
+      :`<span class="badge badge-blue" style="font-size:9px">${esc(s.cls||'')}</span>${s.isHelper?`<span class="badge" style="background:#f3e8fd;color:#8e44ad;font-size:9px;margin-right:4px">📚 עוזר/ת ספרייה</span>`:''}`)+libBadge;
     const avatar=isTeacher?'👩‍🏫':(s.first[0]||'?');
     const avatarBg=isTeacher?'#27ae60':cols[i%cols.length];
     const checked=bulkSelectedIds.has(s.id)?'checked':'';
@@ -5121,27 +5127,16 @@ async function bulkMakeLibrarians(){
 // for designating students as librarians (doesn't require first using the
 // checkbox/bulk-select-bar flow in the students table). Reuses bulkMakeLibrarians().
 let libPickerSelected=new Set();
-let libPickerExistingNames=null;
 async function openLibrarianPicker(){
   libPickerSelected=new Set();
-  libPickerExistingNames=null;
   const searchEl=document.getElementById('lib-picker-search');if(searchEl)searchEl.value='';
-  await renderLibrarianPickerList();
+  renderLibrarianPickerList();
   openModal('modal-lib-picker');
 }
-async function renderLibrarianPickerList(){
+function renderLibrarianPickerList(){
   const el=document.getElementById('lib-picker-list');
   if(!el)return;
-  if(!libPickerExistingNames){
-    libPickerExistingNames=new Set();
-    try{
-      if(currentLibRef){
-        const snap=await currentLibRef.child('librarianAccounts').once('value');
-        const accounts=snap.val()||{};
-        Object.values(accounts).forEach(a=>libPickerExistingNames.add(a.name));
-      }
-    }catch(e){/* leave empty — non-fatal */}
-  }
+  const libIds=DB.librarianStudentIds||new Set();
   const q=(document.getElementById('lib-picker-search')?.value||'').trim().toLowerCase();
   const list=DB.students.filter(s=>{
     if((s.role||'student')==='teacher')return false;
@@ -5151,7 +5146,7 @@ async function renderLibrarianPickerList(){
   if(!list.length){el.innerHTML='<div style="padding:12px;text-align:center;color:var(--muted);font-size:11px">לא נמצאו תלמידים</div>';return;}
   el.innerHTML=list.map(s=>{
     const name=s.first+' '+s.last;
-    const isLib=libPickerExistingNames.has(name);
+    const isLib=libIds.has(s.id);
     return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px">
       <input type="checkbox" ${libPickerSelected.has(s.id)?'checked':''} ${isLib?'disabled':''} onchange="toggleLibPicker(${s.id},this.checked)">
       <span style="flex:1">${esc(name)}</span>
@@ -5174,7 +5169,6 @@ async function applyLibrarianPicker(){
   bulkSelectedIds=new Set(libPickerSelected);
   await bulkMakeLibrarians();
   libPickerSelected=new Set();
-  libPickerExistingNames=null;
   closeModal('modal-lib-picker');
 }
 
