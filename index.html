@@ -687,6 +687,9 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
     <div class="content">
       <!-- DASHBOARD -->
       <div class="view active" id="view-dashboard">
+        <button class="btn btn-sm btn-ghost admin-only" onclick="openLibrariansOverview()" style="margin-bottom:12px">
+          🔑 ספרנים ועוזרי/ות ספרייה (<span id="d-lib-count">0</span>)
+        </button>
         <div class="dash-grid">
           <div class="stat-card"><div class="stat-icon" style="background:#e8f0fb">📚</div><div><div class="stat-val" id="d-books">0</div><div class="stat-lbl">ספרים</div><div style="font-size:10px;color:var(--green)" id="d-avail"></div></div></div>
           <div class="stat-card"><div class="stat-icon" style="background:#e8f9ef">👥</div><div><div class="stat-val" id="d-students">0</div><div class="stat-lbl">תלמידים</div></div></div>
@@ -1385,6 +1388,22 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
   </div>
 </div>
 
+<!-- Librarians & helpers overview -->
+<div class="modal-overlay" id="modal-lib-overview">
+  <div class="modal" style="width:min(520px,96vw)">
+    <div class="modal-header"><h3>🔑 ספרנים ועוזרי/ות ספרייה</h3><button class="modal-close" onclick="closeModal('modal-lib-overview')">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">🔑 ספרנים (<span id="lib-ov-lib-count">0</span>)</div>
+      <div id="lib-ov-lib-list" style="margin-bottom:16px"></div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">📚 עוזרי/ות ספרייה (<span id="lib-ov-helper-count">0</span>)</div>
+      <div id="lib-ov-helper-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-lib-overview')">סגור</button>
+    </div>
+  </div>
+</div>
+
 <!-- Student Detail -->
 <div class="modal-overlay" id="modal-sdet">
   <div class="modal modal-lg"><div class="modal-header"><h3 id="sdet-name">פרופיל</h3><button class="modal-close" onclick="closeModal('modal-sdet')">✕</button></div>
@@ -1801,8 +1820,13 @@ function enterLibrary(id){
     };
     // Which students have a password-based librarian account — kept in sync
     // here (realtime, like everything else in DB) so the students table can
-    // show a "ספרן/ית" badge without a separate async fetch.
-    DB.librarianStudentIds=new Set(Object.values(val.librarianAccounts||{}).map(a=>a.studentId).filter(id=>id!=null));
+    // show a "ספרן/ית" badge without a separate async fetch. Also keep the
+    // studentId→accountId mapping so UI elsewhere (e.g. the dashboard
+    // overview) can offer a password reset without its own fetch.
+    const libAccountsVal=val.librarianAccounts||{};
+    DB.librarianStudentIds=new Set(Object.values(libAccountsVal).map(a=>a.studentId).filter(id=>id!=null));
+    DB.librarianAccountIdByStudent={};
+    Object.entries(libAccountsVal).forEach(([accId,a])=>{if(a.studentId!=null)DB.librarianAccountIdByStudent[a.studentId]=accId;});
     // Migrate/normalize class format ("ג1", "ג 1", "ג'1"... → "כיתה ג1") and save
     let migrated=false;
     DB.students.forEach(s=>{
@@ -1964,6 +1988,12 @@ function renderDash(){
   document.getElementById('d-students').textContent=DB.students.length;
   document.getElementById('d-active').textContent=al;
   document.getElementById('d-overdue').textContent=od;
+  const libCntEl=document.getElementById('d-lib-count');
+  if(libCntEl){
+    const libIds=DB.librarianStudentIds||new Set();
+    const helperCnt=DB.students.filter(s=>s.isHelper).length;
+    libCntEl.textContent=libIds.size+helperCnt;
+  }
   const al2=document.getElementById('act-list');
   if(al2)al2.innerHTML=DB.actLog.slice(0,10).map(a=>`<div style="display:flex;align-items:flex-start;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="width:7px;height:7px;border-radius:50%;background:${a.color};margin-top:4px;flex-shrink:0"></div><div><div style="font-size:11px;color:var(--text2)">${esc(a.text)}</div><div style="font-size:9px;color:var(--muted)">${a.time}</div></div></div>`).join('')||'<div style="text-align:center;padding:16px;color:var(--muted);font-size:11px">אין פעילות</div>';
   const odl=document.getElementById('od-list');
@@ -5113,6 +5143,38 @@ async function bulkMakeLibrarians(){
 // for designating students as librarians (doesn't require first using the
 // checkbox/bulk-select-bar flow in the students table). Reuses bulkMakeLibrarians().
 let libPickerSelected=new Set();
+// Dashboard overview — who's a librarian / library helper, with a quick
+// password-reset action for each librarian, right from the dashboard.
+function openLibrariansOverview(){
+  renderLibrariansOverview();
+  openModal('modal-lib-overview');
+}
+function renderLibrariansOverview(){
+  if(!DB)return;
+  const libIds=DB.librarianStudentIds||new Set();
+  const accIdByStudent=DB.librarianAccountIdByStudent||{};
+  const librarians=DB.students.filter(s=>libIds.has(s.id)).sort((a,b)=>(a.first+a.last).localeCompare(b.first+b.last,'he'));
+  const helpers=DB.students.filter(s=>s.isHelper).sort((a,b)=>(a.first+a.last).localeCompare(b.first+b.last,'he'));
+
+  document.getElementById('lib-ov-lib-count').textContent=librarians.length;
+  const libList=document.getElementById('lib-ov-lib-list');
+  libList.innerHTML=librarians.length?librarians.map(s=>{
+    const accId=accIdByStudent[s.id];
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--border);font-size:12px">
+      <span style="flex:1;font-weight:600">${esc(s.first+' '+s.last)}</span>
+      <span style="font-size:10px;color:var(--muted)">${esc(s.cls||'')}</span>
+      ${accId?`<button class="btn btn-xs" style="background:var(--navy);color:#fff" onclick="resetLibrarianPassword('${accId}')">🔑 איפוס סיסמה</button>`:''}
+    </div>`;
+  }).join(''):'<div style="color:var(--muted);text-align:center;padding:8px;font-size:11px">אין ספרנים כרגע</div>';
+
+  document.getElementById('lib-ov-helper-count').textContent=helpers.length;
+  const helperList=document.getElementById('lib-ov-helper-list');
+  helperList.innerHTML=helpers.length?helpers.map(s=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--border);font-size:12px">
+      <span style="flex:1;font-weight:600">${esc(s.first+' '+s.last)}</span>
+      <span style="font-size:10px;color:var(--muted)">${esc(s.cls||'')}</span>
+    </div>`).join(''):'<div style="color:var(--muted);text-align:center;padding:8px;font-size:11px">אין עוזרי/ות ספרייה כרגע</div>';
+}
 async function openLibrarianPicker(){
   libPickerSelected=new Set();
   const searchEl=document.getElementById('lib-picker-search');if(searchEl)searchEl.value='';
