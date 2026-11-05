@@ -1271,6 +1271,23 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
   </div>
 </div>
 
+<!-- Copies management — per-copy barcode + "not for loan" -->
+<div class="modal-overlay" id="modal-copies">
+  <div class="modal" style="width:min(520px,96vw)">
+    <div class="modal-header"><h3 id="copies-modal-title">📑 ניהול עותקים</h3><button class="modal-close" onclick="closeModal('modal-copies')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        לכל עותק פיזי של הספר יש ברקוד משלו. אפשר להחליף ברקוד (למשל אם כבר יש מדבקה קיימת על הספר), ולסמן עותק ספציפי כ"לא להשאלה" מבלי להשפיע על שאר העותקים.
+      </p>
+      <div id="copies-modal-list" style="max-height:340px;overflow-y:auto"></div>
+      <button class="btn btn-sm btn-primary" style="width:100%;margin-top:10px" onclick="addCopyManual()">+ הוסף עותק</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-copies')">סגור</button>
+    </div>
+  </div>
+</div>
+
 <!-- Student / Staff Modal -->
 <div class="modal-overlay" id="modal-student">
   <div class="modal"><div class="modal-header"><h3 id="ms-title-h">👤 הוסף משאיל</h3><button class="modal-close" onclick="closeModal('modal-student')">✕</button></div>
@@ -2139,6 +2156,7 @@ function renderBooks(){
         <button class="btn btn-xs btn-danger admin-only" onclick="rejectBook(${b.id})" title="דחה ומחק">✕ דחה</button>
         <button class="btn btn-xs btn-ghost admin-only" onclick="editBook(${b.id})" title="עריכה לפני אישור">✏️ עריכה</button>`:
         `<button class="btn btn-xs btn-ghost" onclick="editBook(${b.id})">✏️</button>`}
+        <button class="btn btn-xs btn-ghost admin-only" onclick="openCopiesModal(${b.id})" title="ניהול עותקים — ברקוד וסימון לא-להשאלה לכל עותק">📑 עותקים</button>
         <button class="btn btn-xs" style="background:var(--teal);color:#fff" onclick="goLabels(${b.id})">🏷</button>
         <button class="btn btn-xs" style="background:${printQueueIds.has(b.id)?'var(--green)':'#6366f1'};color:#fff" onclick="addBookToPrintQueue(${b.id})" title="${printQueueIds.has(b.id)?'ברשימת ההדפסה ✓':'הוסף לתור הדפסה'}">${printQueueIds.has(b.id)?'✓🖨':'🖨'}</button>
         ${!b.noLoan&&!b.pendingApproval&&b.copies.filter(c=>c.status==='available').length>0?`<button class="btn btn-xs" style="background:var(--accent);color:#fff" onclick="quickLoan(${b.id})" title="השאל ספר">📤 השאל</button>`:''}
@@ -3310,7 +3328,7 @@ function findCopy(bc){
     if(c)return{book:b,copy:c};
     // Try base barcode match — return first available copy, else first copy
     if(b.barcode===bc||bc.startsWith(b.barcode)){
-      const avail=b.copies.find(x=>x.status==='available');
+      const avail=b.copies.find(x=>x.status==='available'&&!x.noLoan);
       c=avail||b.copies[0];
       if(c)return{book:b,copy:c};
     }
@@ -3405,10 +3423,10 @@ function loanBookPreview(val){
     stEl.textContent='⏳ ממתין לאישור מנהל/ת';stEl.style.color='#ffd9a0';
     btnL.disabled=true;btnL.style.opacity='.45';btnL.style.cursor='not-allowed';
     btnR.disabled=true;btnR.style.opacity='.45';btnR.style.cursor='not-allowed';
-  } else if(book.noLoan){
+  } else if(book.noLoan||copy.noLoan){
     stEl.textContent='🚫 לא להשאלה';stEl.style.color='#ffaaaa';
     btnL.disabled=true;btnL.style.opacity='.45';btnL.style.cursor='not-allowed';
-    btnR.disabled=true;btnR.style.opacity='.45';btnR.style.cursor='not-allowed';
+    btnR.disabled=!(copy.status==='loaned'||copy.status==='overdue');btnR.style.opacity=btnR.disabled?'.45':'1';btnR.style.cursor=btnR.disabled?'not-allowed':'pointer';
   } else if(av){
     stEl.textContent='✅ זמין להשאלה';stEl.style.color='#aaffcc';
     btnL.disabled=false;btnL.style.opacity='1';btnL.style.cursor='pointer';
@@ -3440,7 +3458,7 @@ function quickLoan(bookId){
   // Navigate to loans view and pre-fill barcode
   const book=DB.books.find(x=>x.id===bookId);
   if(!book)return;
-  const avail=book.copies.find(c=>c.status==='available');
+  const avail=book.copies.find(c=>c.status==='available'&&!c.noLoan);
   if(!avail){showView('loans',document.querySelector('.nav-item[onclick*="loans"]'));return;}
   showView('loans',null);
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -3472,6 +3490,7 @@ function doLoan(){
   const found=findCopy(document.getElementById('loan-b').value);if(!found){showFB('ברקוד לא נמצא','warning');return;}
   const{book,copy}=found;
   if(book.pendingApproval){showFB(`"${book.title}" ממתין לאישור מנהל/ת ועדיין לא ניתן להשאלה`,'warning');return;}
+  if(book.noLoan||copy.noLoan){showFB(`עותק "${book.title}" מסומן כ"לא להשאלה"`,'warning');return;}
   if(copy.status!=='available'){showFB(`עותק "${book.title}" אינו זמין`,'warning');return;}
   copy.status='loaned';
   DB._ids.loan++;
@@ -4410,12 +4429,83 @@ function mbCheckDuplicate(title){
 }
 function addCopyToBook(id){
   const b=DB.books.find(x=>x.id===id);if(!b)return;
-  const n=b.copies.length+1;
+  const n=Math.max(0,...b.copies.map(c=>c.num))+1;
   b.copies.push({num:n,bc:b.barcode+'-'+n,status:'available'});
   saveDB();closeModal('modal-book');
   alert('✅ עותק '+n+' נוסף לספר "'+b.title+'"');
 }
 
+// ════════════════════════════════════════
+//  COPIES MANAGEMENT — per-copy barcode + "not for loan"
+// ════════════════════════════════════════
+let copiesModalBookId=null;
+function openCopiesModal(bookId){
+  const b=DB.books.find(x=>x.id===bookId);if(!b)return;
+  copiesModalBookId=bookId;
+  document.getElementById('copies-modal-title').textContent='📑 ניהול עותקים — '+b.title;
+  renderCopiesModalList();
+  openModal('modal-copies');
+}
+function renderCopiesModalList(){
+  const b=DB.books.find(x=>x.id===copiesModalBookId);
+  const el=document.getElementById('copies-modal-list');
+  if(!b||!el)return;
+  const statusLbl={available:'✅ זמין',loaned:'🔄 מושאל',overdue:'⏰ באיחור'};
+  el.innerHTML=[...b.copies].sort((a,c)=>a.num-c.num).map(c=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid var(--border);font-size:12px">
+      <span style="font-size:10px;color:var(--muted);width:20px;flex-shrink:0">#${c.num}</span>
+      <input type="text" value="${esc(c.bc)}" style="width:110px;padding:4px 7px;border:1.5px solid var(--border);border-radius:5px;font-size:11px;font-family:'Space Mono',monospace"
+        onchange="saveCopyBarcode(${c.num},this)">
+      <span style="font-size:10px;color:var(--muted);width:60px">${statusLbl[c.status]||c.status}</span>
+      <label style="display:flex;align-items:center;gap:4px;font-size:10px;cursor:pointer;flex:1">
+        <input type="checkbox" ${c.noLoan?'checked':''} onchange="toggleCopyNoLoan(${c.num},this.checked)">
+        🚫 לא להשאלה
+      </label>
+      ${c.status==='available'?`<button class="btn btn-xs btn-danger" onclick="removeCopy(${c.num})">🗑</button>`:''}
+    </div>`).join('')||'<div style="color:var(--muted);text-align:center;padding:10px;font-size:11px">אין עותקים</div>';
+}
+function saveCopyBarcode(copyNum,inputEl){
+  const b=DB.books.find(x=>x.id===copiesModalBookId);if(!b)return;
+  const copy=b.copies.find(c=>c.num===copyNum);if(!copy)return;
+  const newBc=inputEl.value.trim();
+  if(!newBc){alert('ברקוד לא יכול להיות ריק');inputEl.value=copy.bc;return;}
+  if(newBc===copy.bc)return;
+  const clash=DB.books.some(bk=>bk.copies.some(c=>c.bc===newBc&&!(bk.id===b.id&&c.num===copyNum)));
+  if(clash){alert('הברקוד "'+newBc+'" כבר קיים על עותק אחר בקטלוג — יש לבחור ברקוד ייחודי');inputEl.value=copy.bc;return;}
+  copy.bc=newBc;
+  saveDB();
+}
+function toggleCopyNoLoan(copyNum,checked){
+  const b=DB.books.find(x=>x.id===copiesModalBookId);if(!b)return;
+  const copy=b.copies.find(c=>c.num===copyNum);if(!copy)return;
+  copy.noLoan=checked;
+  saveDB();
+  renderBooks();
+}
+function removeCopy(copyNum){
+  const b=DB.books.find(x=>x.id===copiesModalBookId);if(!b)return;
+  const copy=b.copies.find(c=>c.num===copyNum);if(!copy)return;
+  if(copy.status!=='available'){alert('לא ניתן להסיר עותק שמושאל כרגע');return;}
+  if(!confirm('להסיר את עותק #'+copyNum+' ("'+copy.bc+'")?'))return;
+  b.copies=b.copies.filter(c=>c.num!==copyNum);
+  saveDB();
+  renderCopiesModalList();
+  renderBooks();
+}
+function addCopyManual(){
+  const b=DB.books.find(x=>x.id===copiesModalBookId);if(!b)return;
+  const n=Math.max(0,...b.copies.map(c=>c.num))+1;
+  const suggested=b.barcode+'-'+n;
+  const bc=prompt('ברקוד לעותק החדש:',suggested);
+  if(bc===null)return;
+  const trimmed=bc.trim()||suggested;
+  const clash=DB.books.some(bk=>bk.copies.some(c=>c.bc===trimmed));
+  if(clash){alert('הברקוד "'+trimmed+'" כבר קיים על עותק אחר בקטלוג');return;}
+  b.copies.push({num:n,bc:trimmed,status:'available'});
+  saveDB();
+  renderCopiesModalList();
+  renderBooks();
+}
 function mbDuplicateFromPopulate(){
   const dl=document.getElementById('mb-dup-from-list');
   if(dl&&DB)dl.innerHTML=DB.books.map(b=>`<option value="${esc(b.title)}">`).join('');
@@ -4424,23 +4514,35 @@ function mbDuplicateFrom(){
   const inp=document.getElementById('mb-dup-from');
   const q=inp.value.trim();
   if(!q){mbShowFillStatus('warning','הקלד שם ספר קיים לשכפול ממנו');return;}
-  const ref=DB.books.find(b=>b.title===q&&b.id!==editingBookId)||DB.books.find(b=>b.title.includes(q)&&b.id!==editingBookId);
-  if(!ref){mbShowFillStatus('error','לא נמצא ספר תואם בקטלוג');return;}
-  const filled=[];
-  if(ref.author){document.getElementById('mb-f-author').value=ref.author;filled.push('מחבר');}
-  if(ref.section){document.getElementById('mb-f-sec').value=ref.section;mbLocationManual=true;document.getElementById('mb-sec-auto-badge').style.display='none';filled.push('קטע');}
-  if(ref.shelf){document.getElementById('mb-f-shelf').value=ref.shelf;document.getElementById('mb-shelf-auto-badge').style.display='none';filled.push('מדף');}
-  if(ref.subject){loadSubjectsFromBook(ref.subject);filled.push('נושא');}
-  if(ref.tags?.length){loadTagsFromBook(ref.tags);filled.push('תגיות');}
-  if(ref.group){const grp=GROUPS.find(g=>g.id===ref.group.id);if(grp){initGroupGrid('mb-grp-grid',grp);mbGrp=grp;filled.push('קבוצת גיל');}}
-  if(ref.series){
-    document.getElementById('mb-f-series').value=ref.series;
-    const maxNum=Math.max(0,...DB.books.filter(b=>(b.series||'')===ref.series).map(b=>b.seriesNum||0));
-    document.getElementById('mb-f-series-num').value=maxNum+1;
-    filled.push('סדרה ('+'מספר '+(maxNum+1)+' בתור)');
+  try{
+    const ref=DB.books.find(b=>b.title===q&&b.id!==editingBookId)||DB.books.find(b=>b.title.includes(q)&&b.id!==editingBookId);
+    if(!ref){mbShowFillStatus('error','לא נמצא ספר תואם בקטלוג בשם "'+q+'"');return;}
+    const filled=[];
+    if(ref.author){document.getElementById('mb-f-author').value=ref.author;filled.push('מחבר');}
+    if(ref.section){document.getElementById('mb-f-sec').value=ref.section;mbLocationManual=true;document.getElementById('mb-sec-auto-badge').style.display='none';filled.push('קטע');}
+    if(ref.shelf){document.getElementById('mb-f-shelf').value=ref.shelf;document.getElementById('mb-shelf-auto-badge').style.display='none';filled.push('מדף');}
+    if(ref.subject){loadSubjectsFromBook(ref.subject);filled.push('נושא');}
+    if(ref.tags?.length){loadTagsFromBook(ref.tags);filled.push('תגיות');}
+    // Some older catalog entries predate the age-group grid and have no (or
+    // a differently-shaped) group field — guard against that instead of
+    // throwing and silently aborting the whole duplicate-from action.
+    if(ref.group&&ref.group.id){
+      const grp=GROUPS.find(g=>g.id===ref.group.id);
+      if(grp){initGroupGrid('mb-grp-grid',grp);mbGrp=grp;filled.push('קבוצת גיל');}
+    }
+    if(ref.series){
+      document.getElementById('mb-f-series').value=ref.series;
+      const maxNum=Math.max(0,...DB.books.filter(b=>(b.series||'')===ref.series).map(b=>b.seriesNum||0));
+      document.getElementById('mb-f-series-num').value=maxNum+1;
+      filled.push('סדרה ('+'מספר '+(maxNum+1)+' בתור)');
+    }
+    inp.value='';
+    if(filled.length)mbShowFillStatus('success','📋 שוכפל מ"'+ref.title+'": '+filled.join(', '));
+    else mbShowFillStatus('warning','נמצא "'+ref.title+'" אך אין בו פרטים לשכפול (מחבר/סדרה/נושא/מיקום ריקים)');
+  }catch(e){
+    console.error('mbDuplicateFrom failed:',e);
+    mbShowFillStatus('error','שגיאה בשכפול: '+e.message);
   }
-  inp.value='';
-  mbShowFillStatus('success','📋 שוכפל מ"'+ref.title+'": '+filled.join(', '));
 }
 async function mbAutoFill(){
   const title=document.getElementById('mb-f-title').value.trim();
@@ -4946,6 +5048,14 @@ async function libLoginPassword(){
     isLibrarianVerified=true;
     currentLibrarianName=acc.name;
     currentLibrarianAccountId=id;
+    // A password login is a DIFFERENT physical person taking over this
+    // browser/tab — it must not inherit admin rights left over from a
+    // Firebase Auth session (Google login persists across reloads) that an
+    // earlier admin forgot to sign out of on a shared library computer.
+    // Without this, books/loans made under the librarian's name would
+    // silently skip the admin-approval requirement.
+    isAdminVerified=false;
+    updateAdminUI();
     updateLibrarianUI();
     msg.style.color='var(--green)';msg.textContent='✅ התחברת בהצלחה!';
     passEl.value='';
