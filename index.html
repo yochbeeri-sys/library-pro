@@ -5450,7 +5450,12 @@ async function checkPendingInvite(user){
 let isAdminVerified = false;
 
 async function checkAdminStatus(user){
-  if(!user){isAdminVerified=false;updateAdminUI();return;}
+  // The app silently signs every visitor in anonymously in the background
+  // (fbAuth.signInAnonymously(), on load) just so Firebase writes are
+  // authenticated — that is NOT an admin identity and must never be able
+  // to become one, no matter what the invite/bootstrap logic below would
+  // otherwise do for a real (Google/email) signed-in user.
+  if(!user||user.isAnonymous){isAdminVerified=false;updateAdminUI();return;}
   // Check pending invite first
   const wasInvited=await checkPendingInvite(user);
   if(wasInvited){isAdminVerified=true;updateAdminUI();return;}
@@ -5458,7 +5463,7 @@ async function checkAdminStatus(user){
     const snap=await fbDb.ref('admins/'+user.uid).once('value');
     isAdminVerified=snap.exists()&&snap.val()===true;
   }catch(e){
-    // No admins list yet — first user becomes admin
+    // No admins list yet — first (real, non-anonymous) user becomes admin
     const snap=await fbDb.ref('admins').once('value');
     if(!snap.exists()){
       await fbDb.ref('admins/'+user.uid).set(true);
@@ -5487,7 +5492,7 @@ async function checkPendingLibrarianInvite(user){
   return false;
 }
 async function checkLibrarianStatus(user){
-  if(!user||!currentLibRef){isLibrarianVerified=false;updateLibrarianUI();return;}
+  if(!user||user.isAnonymous||!currentLibRef){isLibrarianVerified=false;updateLibrarianUI();return;}
   const wasInvited=await checkPendingLibrarianInvite(user);
   if(wasInvited){
     isLibrarianVerified=true;
