@@ -1868,7 +1868,17 @@ function enterLibrary(id){
     DB.books.forEach(b=>{
       if(!b.dateAdded){b.dateAdded=today;migrated=true;}
     });
-    if(migrated)saveDB();
+    // Don't let this automatic migration save clobber a write already in
+    // flight. Every listener fire re-runs this migration check, and with a
+    // large, old catalog there is almost always at least one book missing
+    // dateAdded — so without this guard, a save triggered by someone's
+    // real edit (e.g. a librarian adding a book) could be cancelled and
+    // replaced by this migration's own saveDB() call, which — because the
+    // listener had just reassigned DB to an incoming snapshot that doesn't
+    // yet reflect that edit — would silently overwrite Firebase with data
+    // missing it. The real edit's own saveDB() call is already safe (it
+    // snapshots synchronously at call time); this just avoids stepping on it.
+    if(migrated&&!saveTimer)saveDB();
     checkOverdue();
     refreshCurrentView();
     updateSbStats();
@@ -1922,15 +1932,27 @@ function saveDB(){
     loans:arrToFbObj(DB.loans),
     reservations:arrToFbObj(DB.reservations),
     actLog:DB.actLog.slice(0,50),
-    settings:DB.settings,
     dutyRoster:DB.dutyRoster,
     _ids:DB._ids
   };
+  // settings is written as its own separate operation, not bundled into the
+  // update() above. Firebase's security rules restrict that specific
+  // sub-path to admins — and since update() is all-or-nothing across every
+  // path it's given, bundling settings in meant a permission-denied on
+  // THAT one sub-path (e.g. a librarian's session, which isn't admin) was
+  // silently failing the ENTIRE save, including the book/loan/student
+  // changes that had every right to succeed. Splitting it out means a
+  // librarian's core save always goes through even if the settings write
+  // alongside it (e.g. a newly-typed custom subject) gets rejected.
+  const settingsSnapshot=DB.settings;
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{
     currentLibRef.update(toSave).catch(e=>{
       console.error('Save error:',e);
       showToast('⚠️ שמירה נכשלה: '+e.message,'warning');
+    });
+    currentLibRef.child('settings').set(settingsSnapshot).catch(e=>{
+      console.error('Settings save error:',e);
     });
   },400);
 }
