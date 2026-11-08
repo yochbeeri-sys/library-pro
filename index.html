@@ -4315,7 +4315,26 @@ let selectedSubjects=new Set();
 let customSubjects=[];
 
 function initSubjectPicker(){
-  try{const s=localStorage.getItem('lpro_custom_subjects');if(s)customSubjects=JSON.parse(s);}catch(e){}
+  // Custom subjects used to live only in this browser's localStorage, so a
+  // subject added on one computer was invisible everywhere else (and gone
+  // entirely in a private/incognito window). Now stored in DB.settings,
+  // shared via Firebase like everything else — with a one-time pull of
+  // whatever this browser already had locally, so nothing already entered
+  // is lost.
+  customSubjects=(DB&&DB.settings&&Array.isArray(DB.settings.customSubjects))?DB.settings.customSubjects.slice():[];
+  if(DB&&!(DB.settings.customSubjects&&DB.settings.customSubjects.length)){
+    try{
+      const local=localStorage.getItem('lpro_custom_subjects');
+      if(local){
+        const parsed=JSON.parse(local);
+        if(Array.isArray(parsed)&&parsed.length){
+          customSubjects=[...new Set([...customSubjects,...parsed])];
+          DB.settings.customSubjects=customSubjects;
+          saveDB();
+        }
+      }
+    }catch(e){}
+  }
   renderSubjectChips();
 }
 function renderSubjectChips(){
@@ -4358,7 +4377,7 @@ function addCustomSubject(){
   if(!val)return;
   if(!DEFAULT_SUBJECTS.includes(val)&&!customSubjects.includes(val)){
     customSubjects.push(val);
-    try{localStorage.setItem('lpro_custom_subjects',JSON.stringify(customSubjects));}catch(e){}
+    if(DB){DB.settings.customSubjects=customSubjects;saveDB();}
   }
   selectedSubjects.add(val);
   inp.value='';
@@ -5565,16 +5584,31 @@ function emailBackup(){
 }
 
 // ── Auto-backup: every N days, remind admin to backup ──
+let autoBackupAskedThisSession=false;
 function checkAutoBackup(){
-  if(!isAdminVerified||!DB)return;
+  // This runs on every realtime data refresh (i.e. on every save), so
+  // without a per-session guard it would re-ask on every single save if
+  // declined once. Also, localStorage is per-browser — a never-backed-up
+  // browser (e.g. a private/incognito window, by design) has no stored
+  // timestamp, and treating that as epoch 0 produced an absurd ~20,000-day
+  // message instead of a sensible "never backed up on this browser" one.
+  if(!isAdminVerified||!DB||autoBackupAskedThisSession)return;
   const lastKey='lpro_last_backup_'+currentLibId;
-  const last=parseInt(localStorage.getItem(lastKey)||'0');
-  const days=Math.floor((Date.now()-last)/(1000*60*60*24));
+  const lastRaw=localStorage.getItem(lastKey);
   const interval=parseInt(DB.settings?.backupDays||7);
-  if(days>=interval){
-    const go=confirm('⏰ גיבוי אוטומטי — עברו '+days+' ימים מהגיבוי האחרון.\nהורד גיבוי עכשיו?');
-    if(go){exportBackup();localStorage.setItem(lastKey,Date.now());}
+  let due,msg;
+  if(!lastRaw){
+    due=true;
+    msg='⏰ גיבוי אוטומטי — לא בוצע עדיין גיבוי בדפדפן הזה.\nהורד גיבוי עכשיו?';
+  }else{
+    const days=Math.floor((Date.now()-parseInt(lastRaw))/(1000*60*60*24));
+    due=days>=interval;
+    msg='⏰ גיבוי אוטומטי — עברו '+days+' ימים מהגיבוי האחרון.\nהורד גיבוי עכשיו?';
   }
+  if(!due)return;
+  autoBackupAskedThisSession=true;
+  const go=confirm(msg);
+  if(go){exportBackup();localStorage.setItem(lastKey,Date.now());}
 }
 
 // ════════════════════════════════════════
