@@ -1196,7 +1196,11 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
             </div>
             <div class="cols2">
               <div class="field"><label>ברקוד בסיסי</label><div style="display:flex;gap:5px"><input type="text" id="mb-f-bc" style="flex:1"><button class="btn btn-teal btn-sm" onclick="openScan('mb-f-bc')" style="padding:6px 8px;font-size:13px">📷</button></div></div>
-              <div class="field"><label>עותקים</label><input type="number" id="mb-f-copies" value="1" min="1" max="50"></div>
+              <div class="field"><label>עותקים</label><input type="number" id="mb-f-copies" value="1" min="1" max="50" onchange="mbRenderCopyOverridesList()"></div>
+            </div>
+            <div class="field">
+              <button type="button" class="btn btn-sm btn-ghost" onclick="mbAddCopyWithBarcode()">+ הוסף עותק עם ברקוד</button>
+              <div id="mb-copy-overrides-list" style="margin-top:6px"></div>
             </div>
             <div class="cols2">
               <div class="field">
@@ -2230,6 +2234,7 @@ function openAddBookModal(){
   const shb=document.getElementById('mb-shelf-auto-badge');if(shb)shb.style.display='none';
   const dupEl=document.getElementById('mb-dup-from');if(dupEl)dupEl.value='';
   mbDuplicateFromPopulate();
+  mbCopyBarcodeOverrides={};mbRenderCopyOverridesList();
   openModal('modal-book');
 }
 function editBook(id){
@@ -2253,6 +2258,7 @@ function editBook(id){
   const grp=GROUPS.find(g=>g.id===b.group?.id)||GROUPS[0];initGroupGrid('mb-grp-grid',grp);mbGrp=grp;
   const dupEl=document.getElementById('mb-dup-from');if(dupEl)dupEl.value='';
   mbDuplicateFromPopulate();
+  mbCopyBarcodeOverrides={};mbRenderCopyOverridesList();
   openModal('modal-book');
 }
 function setStep(n){if(n===2){setTimeout(()=>{initSubjectPicker&&initSubjectPicker();renderTagChips&&renderTagChips();},50);}
@@ -2332,6 +2338,7 @@ function goManual(){
   const s=document.getElementById('mb-autofill-status');if(s)s.style.display='none';
   const dupEl=document.getElementById('mb-dup-from');if(dupEl)dupEl.value='';
   mbDuplicateFromPopulate();
+  mbCopyBarcodeOverrides={};mbRenderCopyOverridesList();
   setStep(2);
 }
 function renderISBN(books){
@@ -2380,10 +2387,10 @@ function saveBook(stayOpen=false){
     b.barcode=bc;b.section=section;b.shelf=shelf;b.group=grp;
     b.subject=subject;b.tags=tags;b.series=series;b.seriesNum=seriesNum;b.noLoan=noLoan;
     if(cover)b.cover=cover;
-    while(b.copies.length<nc){const n=b.copies.length+1;b.copies.push({num:n,bc:bc+'-'+n,status:'available'});}
+    while(b.copies.length<nc){const n=b.copies.length+1;b.copies.push({num:n,bc:mbCopyBarcodeOverrides[n]||(bc+'-'+n),status:'available'});}
   }else{
     DB._ids.book++;
-    const copies=Array.from({length:nc},(_,i)=>({num:i+1,bc:bc+'-'+(i+1),status:'available'}));
+    const copies=Array.from({length:nc},(_,i)=>{const n=i+1;return{num:n,bc:mbCopyBarcodeOverrides[n]||(bc+'-'+n),status:'available'};});
     const pendingApproval=!isAdminVerified;
     DB.books.push({id:DB._ids.book,title,author:document.getElementById('mb-f-author').value.trim(),
       barcode:bc,section,shelf,group:grp,copies,loanCount:0,cover,
@@ -2395,6 +2402,7 @@ function saveBook(stayOpen=false){
   updateSbStats();
   saveDB();
   coverB64=null;selectedISBN=null;
+  mbCopyBarcodeOverrides={};mbRenderCopyOverridesList();
   if(stayOpen){
     // Reset form for next book — keep group, section, shelf and series as defaults
     const keepSeries=series;const keepGrp=grp;const keepSec=section;const keepShelf=shelf;
@@ -4634,6 +4642,44 @@ function addCopyManual(){
   saveDB();
   renderCopiesModalList();
   renderBooks();
+}
+// Per-copy barcode overrides while filling the add/edit book form — lets
+// each additional copy get its own chosen barcode (e.g. matching a sticker
+// a physical copy already has) instead of always auto-generating <base>-<n>.
+let mbCopyBarcodeOverrides={};
+function mbAddCopyWithBarcode(){
+  const copiesEl=document.getElementById('mb-f-copies');
+  const current=parseInt(copiesEl.value)||1;
+  const next=current+1;
+  const baseBc=document.getElementById('mb-f-bc').value.trim()||String(DB._ids.book+1).padStart(4,'0');
+  const suggested=baseBc+'-'+next;
+  const bcInput=prompt('ברקוד לעותק מספר '+next+':',suggested);
+  if(bcInput===null)return;
+  const bc=bcInput.trim()||suggested;
+  const clash=DB.books.some(bk=>bk.copies.some(c=>c.bc===bc))||Object.values(mbCopyBarcodeOverrides).includes(bc);
+  if(clash){alert('הברקוד "'+bc+'" כבר קיים על עותק אחר בקטלוג');return;}
+  mbCopyBarcodeOverrides[next]=bc;
+  copiesEl.value=next;
+  mbRenderCopyOverridesList();
+}
+function mbRemoveCopyOverride(n){
+  delete mbCopyBarcodeOverrides[n];
+  mbRenderCopyOverridesList();
+}
+function mbRenderCopyOverridesList(){
+  const el=document.getElementById('mb-copy-overrides-list');
+  if(!el)return;
+  // Drop overrides for copy numbers beyond the current copies count (e.g.
+  // if the admin manually lowered the number field after adding one).
+  const nc=parseInt(document.getElementById('mb-f-copies')?.value)||1;
+  Object.keys(mbCopyBarcodeOverrides).forEach(n=>{if(+n>nc)delete mbCopyBarcodeOverrides[n];});
+  const entries=Object.entries(mbCopyBarcodeOverrides).sort((a,b)=>+a[0]-+b[0]);
+  el.innerHTML=entries.length?entries.map(([n,bc])=>`
+    <div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0">
+      <span style="color:var(--muted)">עותק ${esc(n)}:</span>
+      <span style="font-family:'Space Mono',monospace">${esc(bc)}</span>
+      <button type="button" onclick="mbRemoveCopyOverride(${n})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:12px;padding:0 4px">✕</button>
+    </div>`).join(''):'';
 }
 function mbDuplicateFromPopulate(){
   const dl=document.getElementById('mb-dup-from-list');
