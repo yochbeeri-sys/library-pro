@@ -1072,6 +1072,19 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
             </div>
           </div>
 
+          <div class="card"><div class="card-header"><div class="card-title">🏷 ניהול נושאי ספרים</div></div>
+            <div class="card-body">
+              <div id="subjects-list" style="max-height:260px;overflow-y:auto;margin-bottom:12px"></div>
+              <div style="display:flex;gap:6px">
+                <input type="text" id="ns-name" placeholder="נושא חדש..." style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addSubjectSettings()}">
+                <button class="btn btn-navy btn-sm" onclick="addSubjectSettings()">+ הוסף</button>
+              </div>
+              <div style="font-size:9px;color:var(--muted);margin-top:8px;line-height:1.5">
+                💡 שינוי שם נושא קיים מעדכן את כל הספרים שכבר מתויגים בו. מחיקת נושא מסירה אותו מרשימת הבחירה בלבד — לא משנה ספרים שכבר תויגו בו.
+              </div>
+            </div>
+          </div>
+
           <div class="card"><div class="card-header"><div class="card-title">☁️ מידע על הנתונים</div></div>
             <div class="card-body">
               <div style="background:#e6f3fb;border:1px solid #a8d8f0;border-radius:8px;padding:11px 13px;font-size:12px;line-height:1.7;margin-bottom:12px">
@@ -1959,6 +1972,7 @@ function refreshCurrentView(){
     if(DB.settings.logo)document.getElementById('logo-disp').innerHTML=`<img src="${DB.settings.logo}" style="max-height:40px;display:block;margin:0 auto 2px"><div style="font-size:10px;color:var(--muted)">לחץ להחלפה</div>`;
     loadCustomGroups();
     renderGroupsList();
+    renderSubjectsSettingsList();
   }
   updateDataLists();
 }
@@ -2187,7 +2201,7 @@ function openAddBookModal(){
   document.getElementById('mb-cover-prev').innerHTML='📚';
   document.getElementById('mb-cover-prev').style.cssText='width:130px;height:175px;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;background:#f0ede6;display:flex;align-items:center;justify-content:center;font-size:36px';
   const nlEl=document.getElementById('mb-f-noloan');if(nlEl)nlEl.checked=false;
-  clearSubjectPicker();customSubjects=customSubjects||[];
+  clearSubjectPicker();
   setStep(2);initGroupGrid('mb-grp-grid',GROUPS[0]);mbGrp=GROUPS[0];
   const s=document.getElementById('mb-autofill-status');if(s)s.style.display='none';
   const sb=document.getElementById('mb-sec-auto-badge');if(sb)sb.style.display='none';
@@ -4312,34 +4326,34 @@ const DEFAULT_SUBJECTS=['הרפתקאות','מתח ומסתורין','פנטזי
   'חברות ורגשות','ערכים','היסטוריה','טבע ומדע','יהדות','ספורט',
   'משפחה','אהבה','מלחמה ושואה','קומיקס','שירה','אגדות ומיתולוגיה'];
 let selectedSubjects=new Set();
-let customSubjects=[];
 
-function initSubjectPicker(){
-  // Custom subjects used to live only in this browser's localStorage, so a
-  // subject added on one computer was invisible everywhere else (and gone
-  // entirely in a private/incognito window). Now stored in DB.settings,
-  // shared via Firebase like everything else — with a one-time pull of
-  // whatever this browser already had locally, so nothing already entered
-  // is lost.
-  customSubjects=(DB&&DB.settings&&Array.isArray(DB.settings.customSubjects))?DB.settings.customSubjects.slice():[];
-  if(DB&&!(DB.settings.customSubjects&&DB.settings.customSubjects.length)){
+// Single shared list of subjects, stored in DB.settings.subjects (synced via
+// Firebase, available on every device — unlike the old localStorage-only
+// "custom subjects" list, which vanished in a private window and never
+// reached any other computer). Seeded once from DEFAULT_SUBJECTS plus
+// whatever this browser's legacy localStorage copy had, so nothing already
+// entered is lost on first load after the upgrade.
+function ensureSubjectsList(){
+  if(!DB)return DEFAULT_SUBJECTS;
+  if(!Array.isArray(DB.settings.subjects)){
+    let merged=[...DEFAULT_SUBJECTS];
+    if(Array.isArray(DB.settings.customSubjects))merged=[...new Set([...merged,...DB.settings.customSubjects])];
     try{
       const local=localStorage.getItem('lpro_custom_subjects');
-      if(local){
-        const parsed=JSON.parse(local);
-        if(Array.isArray(parsed)&&parsed.length){
-          customSubjects=[...new Set([...customSubjects,...parsed])];
-          DB.settings.customSubjects=customSubjects;
-          saveDB();
-        }
-      }
+      if(local){const parsed=JSON.parse(local);if(Array.isArray(parsed))merged=[...new Set([...merged,...parsed])];}
     }catch(e){}
+    DB.settings.subjects=merged;
+    saveDB();
   }
+  return DB.settings.subjects;
+}
+function initSubjectPicker(){
+  ensureSubjectsList();
   renderSubjectChips();
 }
 function renderSubjectChips(){
   const el=document.getElementById('subject-chips');if(!el)return;
-  const all=[...DEFAULT_SUBJECTS,...customSubjects];
+  const all=ensureSubjectsList();
 
   // ── Top row: selected subjects as removable chips ──
   const selRow=document.getElementById('selected-subjects-row');
@@ -4375,15 +4389,80 @@ function addCustomSubject(){
   const inp=document.getElementById('mb-f-subject');
   const val=inp.value.trim();
   if(!val)return;
-  if(!DEFAULT_SUBJECTS.includes(val)&&!customSubjects.includes(val)){
-    customSubjects.push(val);
-    if(DB){DB.settings.customSubjects=customSubjects;saveDB();}
+  const list=ensureSubjectsList();
+  if(!list.some(s=>s.toLowerCase()===val.toLowerCase())){
+    list.push(val);
+    if(DB){DB.settings.subjects=list;saveDB();}
   }
   selectedSubjects.add(val);
   inp.value='';
   renderSubjectChips();
 }
 function clearSubjectPicker(){selectedSubjects=new Set();renderSubjectChips();}
+
+// ── Subject management (Settings page) — add / rename / delete ──
+let subjectsSettingsSorted=[];
+function renderSubjectsSettingsList(){
+  const el=document.getElementById('subjects-list');
+  if(!el||!DB)return;
+  const list=ensureSubjectsList();
+  subjectsSettingsSorted=[...list].sort((a,b)=>a.localeCompare(b,'he'));
+  el.innerHTML=subjectsSettingsSorted.length?subjectsSettingsSorted.map((s,i)=>{
+    const cnt=DB.books.filter(b=>(b.subject||'').split(/[,،]/).map(x=>x.trim()).includes(s)).length;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--border)">
+      <input type="text" value="${esc(s)}" style="flex:1;padding:4px 7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px" onchange="renameSubjectSettings(${i},this)">
+      <span style="font-size:10px;color:var(--muted);white-space:nowrap">${cnt} ספרים</span>
+      <button onclick="deleteSubjectSettings(${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:13px;padding:2px 4px" title="מחק">✕</button>
+    </div>`;
+  }).join(''):'<div style="color:var(--muted);text-align:center;padding:10px;font-size:11px">אין נושאים עדיין</div>';
+}
+function addSubjectSettings(){
+  const inp=document.getElementById('ns-name');
+  const val=inp.value.trim();
+  if(!val){alert('נא להכניס שם נושא');return;}
+  const list=ensureSubjectsList();
+  if(list.some(s=>s.toLowerCase()===val.toLowerCase())){alert('נושא זה כבר קיים ברשימה');return;}
+  list.push(val);
+  DB.settings.subjects=list;
+  saveDB();
+  inp.value='';
+  renderSubjectsSettingsList();
+}
+function renameSubjectSettings(idx,inputEl){
+  const oldName=subjectsSettingsSorted[idx];
+  const newName=inputEl.value.trim();
+  if(!newName){alert('שם נושא לא יכול להיות ריק');inputEl.value=oldName;return;}
+  if(newName===oldName)return;
+  const list=ensureSubjectsList();
+  if(list.some(s=>s!==oldName&&s.toLowerCase()===newName.toLowerCase())){
+    alert('נושא בשם "'+newName+'" כבר קיים');inputEl.value=oldName;return;
+  }
+  const i=list.indexOf(oldName);
+  if(i>-1)list[i]=newName;
+  // Cascade the rename into every book currently tagged with the old name.
+  let updatedBooks=0;
+  DB.books.forEach(b=>{
+    if(!b.subject)return;
+    const parts=b.subject.split(/[,،]/).map(s=>s.trim()).filter(Boolean);
+    if(parts.includes(oldName)){
+      b.subject=parts.map(p=>p===oldName?newName:p).join(', ');
+      updatedBooks++;
+    }
+  });
+  DB.settings.subjects=list;
+  saveDB();
+  renderSubjectsSettingsList();
+  if(currentView==='books')renderBooks();
+  if(updatedBooks)alert(`✅ שונה שם הנושא ל-"${newName}" ועודכן ב-${updatedBooks} ספרים`);
+}
+function deleteSubjectSettings(idx){
+  const name=subjectsSettingsSorted[idx];
+  const cnt=DB.books.filter(b=>(b.subject||'').split(/[,،]/).map(x=>x.trim()).includes(name)).length;
+  if(!confirm(`למחוק את הנושא "${name}" מרשימת הבחירה?`+(cnt?`\n\n${cnt} ספרים שכבר מתויגים בנושא זה יישארו כך — רק האפשרות לבחור אותו לספרים חדשים תוסר.`:'')))return;
+  DB.settings.subjects=ensureSubjectsList().filter(s=>s!==name);
+  saveDB();
+  renderSubjectsSettingsList();
+}
 
 // ── Tag chips with remove (×) buttons ──
 let currentTags=[];
@@ -4419,10 +4498,13 @@ function getTagsValue(){return[...currentTags];}
 function loadSubjectsFromBook(str){
   selectedSubjects=new Set();
   if(!str){renderSubjectChips();return;}
+  const list=ensureSubjectsList();
+  let changed=false;
   str.split(/[,،]/).map(s=>s.trim()).filter(Boolean).forEach(s=>{
     selectedSubjects.add(s);
-    if(!DEFAULT_SUBJECTS.includes(s)&&!customSubjects.includes(s))customSubjects.push(s);
+    if(!list.some(x=>x.toLowerCase()===s.toLowerCase())){list.push(s);changed=true;}
   });
+  if(changed&&DB){DB.settings.subjects=list;saveDB();}
   renderSubjectChips();
 }
 
