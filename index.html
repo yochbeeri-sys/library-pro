@@ -4553,7 +4553,13 @@ function mbCheckDuplicate(title){
 function addCopyToBook(id){
   const b=DB.books.find(x=>x.id===id);if(!b)return;
   const n=Math.max(0,...b.copies.map(c=>c.num))+1;
-  b.copies.push({num:n,bc:b.barcode+'-'+n,status:'available'});
+  const suggested=b.barcode+'-'+n;
+  const bcInput=prompt('ברקוד לעותק החדש:',suggested);
+  if(bcInput===null)return;
+  const bc=bcInput.trim()||suggested;
+  const clash=DB.books.some(bk=>bk.copies.some(c=>c.bc===bc));
+  if(clash){alert('הברקוד "'+bc+'" כבר קיים על עותק אחר בקטלוג');return;}
+  b.copies.push({num:n,bc,status:'available'});
   saveDB();closeModal('modal-book');
   alert('✅ עותק '+n+' נוסף לספר "'+b.title+'"');
 }
