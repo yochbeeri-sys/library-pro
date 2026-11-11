@@ -638,7 +638,7 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
       <div class="nav-item" onclick="showView('roster',this)"><span class="icon">🗓️</span>תורנויות ספרנים</div>
       <div class="nav-item" onclick="showView('reports',this)"><span class="icon">📊</span>דוחות</div>
 
-      <div class="nav-item" onclick="showView('settings',this)"><span class="icon">⚙️</span>הגדרות</div>
+      <div class="nav-item admin-only" onclick="showView('settings',this)"><span class="icon">⚙️</span>הגדרות</div>
       <!-- Librarian login -->
       <div id="nav-librarian-btn" onclick="openLibrarianModal()"
         style="margin:4px 10px 2px;padding:7px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;border:1.5px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);transition:all .2s"
@@ -1081,6 +1081,15 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
               </div>
               <div style="font-size:9px;color:var(--muted);margin-top:8px;line-height:1.5">
                 💡 שינוי שם נושא קיים מעדכן את כל הספרים שכבר מתויגים בו. מחיקת נושא מסירה אותו מרשימת הבחירה בלבד — לא משנה ספרים שכבר תויגו בו.
+              </div>
+            </div>
+          </div>
+
+          <div class="card"><div class="card-header"><div class="card-title">✒️ ניהול מחברים (תיקון איות)</div></div>
+            <div class="card-body">
+              <div id="authors-mgmt-list" style="max-height:260px;overflow-y:auto"></div>
+              <div style="font-size:9px;color:var(--muted);margin-top:8px;line-height:1.5">
+                💡 שינוי שם מחבר כאן מעדכן את כל הספרים הרשומים תחת השם הישן.
               </div>
             </div>
           </div>
@@ -1999,6 +2008,7 @@ function refreshCurrentView(){
     loadCustomGroups();
     renderGroupsList();
     renderSubjectsSettingsList();
+    renderAuthorsSettingsList();
   }
   updateDataLists();
 }
@@ -4492,6 +4502,40 @@ function deleteSubjectSettings(idx){
   DB.settings.subjects=ensureSubjectsList().filter(s=>s!==name);
   saveDB();
   renderSubjectsSettingsList();
+}
+
+// ── Author management (Settings page) — fix spelling, cascades to books ──
+let authorsMgmtSorted=[];
+function renderAuthorsSettingsList(){
+  const el=document.getElementById('authors-mgmt-list');
+  if(!el||!DB)return;
+  authorsMgmtSorted=[...new Set(DB.books.map(b=>(b.author||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'he'));
+  el.innerHTML=authorsMgmtSorted.length?authorsMgmtSorted.map((a,i)=>{
+    const cnt=DB.books.filter(b=>(b.author||'').trim()===a).length;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--border)">
+      <input type="text" value="${esc(a)}" style="flex:1;padding:4px 7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px" onchange="renameAuthorSettings(${i},this)">
+      <span style="font-size:10px;color:var(--muted);white-space:nowrap">${cnt} ספרים</span>
+    </div>`;
+  }).join(''):'<div style="color:var(--muted);text-align:center;padding:10px;font-size:11px">אין מחברים עדיין</div>';
+}
+function renameAuthorSettings(idx,inputEl){
+  const oldName=authorsMgmtSorted[idx];
+  const newName=inputEl.value.trim();
+  if(!newName){alert('שם מחבר לא יכול להיות ריק');inputEl.value=oldName;return;}
+  if(newName===oldName)return;
+  const dupIdx=authorsMgmtSorted.findIndex((a,i)=>i!==idx&&a===newName);
+  if(dupIdx>-1&&!confirm(`כבר קיים מחבר בשם "${newName}" — למזג את שתי הרשומות לשם הזה?`)){
+    inputEl.value=oldName;return;
+  }
+  let updatedBooks=0;
+  DB.books.forEach(b=>{
+    if((b.author||'').trim()===oldName){b.author=newName;updatedBooks++;}
+  });
+  saveDB();
+  renderAuthorsSettingsList();
+  if(currentView==='books')renderBooks();
+  updateDataLists();
+  if(updatedBooks)alert(`✅ שונה שם המחבר ל-"${newName}" ועודכן ב-${updatedBooks} ספרים`);
 }
 
 // ── Tag chips with remove (×) buttons ──
