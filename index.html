@@ -999,7 +999,10 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
         <div class="card">
           <div class="card-header">
             <div class="card-title">🗓️ תורנויות ספרנים שבועיות</div>
-            <button class="btn btn-sm btn-primary admin-only" onclick="addRosterRow()">+ הוסף שורה</button>
+            <div style="display:flex;gap:7px">
+              <button class="btn btn-sm btn-ghost admin-only" onclick="openRosterImportModal()">📋 ייבוא מהדבקה</button>
+              <button class="btn btn-sm btn-primary admin-only" onclick="addRosterRow()">+ הוסף שורה</button>
+            </div>
           </div>
           <div class="card-body" style="padding:0">
             <div class="table-wrap"><table id="roster-table"></table></div>
@@ -1365,6 +1368,24 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
 </div>
 
 <!-- Bulk student list sync (paste from Excel/Sheets + compare) -->
+<div class="modal-overlay" id="modal-roster-import">
+  <div class="modal" style="width:min(640px,96vw)">
+    <div class="modal-header"><h3>📋 ייבוא טבלת תורנויות מהדבקה</h3><button class="modal-close" onclick="closeModal('modal-roster-import')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px">
+        בגיליון ה-Google Sheets, סמני את טבלת התורנויות (שורת תוויות + שורות ההפסקות/השעות, בלי שורת הכותרת העליונה הממוזגת), העתיקי (Ctrl+C), והדביקי כאן.
+        העמודה הראשונה היא תווית השורה (למשל "הפסקת 10"), וחמש העמודות הבאות הן ראשון–חמישי. אם הדבקת גם שורת ימים (ראשון/שני/...) היא תזוהה ותידלג אוטומטית.
+      </p>
+      <textarea id="roster-import-area" oninput="renderRosterImportPreview()" placeholder="הפסקת 10&#9;דביר&#9;מתן&#9;יאיר נ&#9;איתן זוהר&#9;נדב&#10;..." style="width:100%;height:160px;padding:10px;border:1.5px solid var(--border);border-radius:7px;font-family:'Heebo',sans-serif;font-size:12px;direction:rtl;resize:vertical;box-sizing:border-box"></textarea>
+      <div id="roster-import-preview" style="margin-top:10px;max-height:220px;overflow-y:auto"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-roster-import')">ביטול</button>
+      <button class="btn btn-primary btn-sm" onclick="importRosterPaste()">ייבא (מחליף את הטבלה הנוכחית)</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-sync">
   <div class="modal" style="width:min(640px,96vw)">
     <div class="modal-header"><h3>🔄 עדכון רשימת תלמידים מטבלה</h3><button class="modal-close" onclick="closeModal('modal-sync')">✕</button></div>
@@ -4040,6 +4061,60 @@ function updateRosterCell(ri,di,val){
   if(val.trim())DB.dutyRoster.cells[key]=val.trim();
   else delete DB.dutyRoster.cells[key];
   saveDB();
+}
+
+// ── Import the whole roster table by pasting from Google Sheets/Excel —
+// tab-separated, first column = row label, next 5 columns = ראשון–חמישי. ──
+function openRosterImportModal(){
+  document.getElementById('roster-import-area').value='';
+  document.getElementById('roster-import-preview').innerHTML='';
+  openModal('modal-roster-import');
+}
+function parseRosterPaste(text){
+  const dayWords=ROSTER_DAYS;
+  const lines=text.split(/\r?\n/).map(l=>l.replace(/\s+$/,''));
+  const rows=[],cellsByRow=[];
+  lines.forEach(line=>{
+    if(!line.trim())return; // skip fully blank lines (spacing in the sheet)
+    const cells=line.split('\t').map(c=>c.trim());
+    const label=cells[0]||'';
+    const dayVals=cells.slice(1,1+ROSTER_DAYS.length);
+    while(dayVals.length<ROSTER_DAYS.length)dayVals.push('');
+    // Skip a header row (blank label, day cells are the weekday names themselves)
+    if(!label&&dayWords.some(d=>dayVals.includes(d)))return;
+    // Skip a row with no label and no data at all
+    if(!label&&dayVals.every(v=>!v))return;
+    rows.push(label);
+    cellsByRow.push(dayVals);
+  });
+  return{rows,cellsByRow};
+}
+function renderRosterImportPreview(){
+  const el=document.getElementById('roster-import-preview');
+  const text=document.getElementById('roster-import-area').value;
+  if(!text.trim()){el.innerHTML='';return;}
+  const{rows,cellsByRow}=parseRosterPaste(text);
+  if(!rows.length){el.innerHTML='<div style="color:var(--muted);font-size:11px;padding:6px">לא זוהו שורות תקינות</div>';return;}
+  const head=ROSTER_DAYS.map(d=>`<th style="font-size:10px;padding:4px">${esc(d)}</th>`).join('');
+  const body=rows.map((label,ri)=>`<tr>
+    <td style="font-size:10px;font-weight:700;padding:4px;white-space:nowrap">${esc(label)||'—'}</td>
+    ${cellsByRow[ri].map(v=>`<td style="font-size:10px;padding:4px;text-align:center;border:1px solid var(--border)">${esc(v)||''}</td>`).join('')}
+  </tr>`).join('');
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table>
+    <div style="font-size:10px;color:var(--muted);margin-top:4px">זוהו ${rows.length} שורות — בדקי שזה נכון לפני הייבוא</div>`;
+}
+function importRosterPaste(){
+  const text=document.getElementById('roster-import-area').value;
+  const{rows,cellsByRow}=parseRosterPaste(text);
+  if(!rows.length){alert('לא זוהו שורות תקינות בהדבקה');return;}
+  if(!confirm(`זוהו ${rows.length} שורות. הייבוא יחליף לגמרי את טבלת התורנויות הנוכחית. להמשיך?`))return;
+  const cells={};
+  cellsByRow.forEach((dayVals,ri)=>{dayVals.forEach((v,di)=>{if(v)cells[ri+'_'+di]=v;});});
+  DB.dutyRoster={rows,cells};
+  saveDB();
+  renderRoster();
+  closeModal('modal-roster-import');
+  alert('✅ טבלת התורנויות יובאה בהצלחה');
 }
 
 function exportOverdueExcel(){
