@@ -3397,18 +3397,31 @@ document.addEventListener('click',e=>{
 function findCopy(bc){
   bc=bc.trim();
   if(!bc)return null;
+  // Checked in strict priority order across the WHOLE catalog at each
+  // level before falling back to the next — a shorter book's base barcode
+  // must never match just because it happens to be a textual prefix of a
+  // longer scanned/typed code (e.g. base barcode "107" is NOT a match for
+  // a scan of "1077" — only "107" itself or "107-<n>" are). Without the
+  // "-" separator requirement here, scanning one book's barcode could
+  // silently resolve to a completely different book (reported directly:
+  // scanning one book's barcode brought up an unrelated book's copy).
+  // 1) Exact copy-barcode match anywhere in the catalog.
   for(const b of DB.books){
-    // Try exact copy barcode match first (e.g. "0101-1")
-    let c=b.copies.find(x=>x.bc===bc);
+    const c=b.copies.find(x=>x.bc===bc);
     if(c)return{book:b,copy:c};
-    // Try base barcode match — return first available copy, else first copy
-    if(b.barcode===bc||bc.startsWith(b.barcode)){
+  }
+  // 2) Exact base-barcode match — pick the first available copy of that book.
+  for(const b of DB.books){
+    if(b.barcode===bc){
       const avail=b.copies.find(x=>x.status==='available'&&!x.noLoan);
-      c=avail||b.copies[0];
+      const c=avail||b.copies[0];
       if(c)return{book:b,copy:c};
     }
-    // Try partial: copy bc starts with input (e.g. user scanned "0101" matches "0101-1")
-    c=b.copies.find(x=>x.bc.startsWith(bc+'-')||x.bc===bc);
+  }
+  // 3) Base-barcode prefix match, only when immediately followed by "-"
+  // (e.g. scanned "1077" matching copy barcode "1077-1").
+  for(const b of DB.books){
+    const c=b.copies.find(x=>x.bc.startsWith(bc+'-'));
     if(c)return{book:b,copy:c};
   }
   return null;
@@ -3557,12 +3570,22 @@ function getStudentMaxBooks(student){
 }
 function doLoan(){
   const sVal=document.getElementById('loan-s').value;
+  // Capture and clear the barcode field up front, before any validation —
+  // a USB/Bluetooth barcode scanner types digits as raw keystrokes into
+  // whatever the field already contains, so leaving a failed or stale scan
+  // in place meant the NEXT scan's digits could land in the middle of or
+  // after it, concatenating two barcodes into one garbled value (reported
+  // directly: "295 identified as 2951", and codes "left over" between
+  // consecutive loans). Clearing here, regardless of outcome, guarantees
+  // the field is always empty and ready before the next scan.
+  const bVal=document.getElementById('loan-b').value;
+  document.getElementById('loan-b').value='';loanBookPreview('');
   if(!sVal.trim()){showFB('נא להזין שם תלמיד/ה','warning');document.getElementById('loan-s').focus();return;}
   const student=findStudent(sVal);if(!student){showFB('תלמיד לא נמצא','warning');document.getElementById('loan-s').focus();return;}
   const al=DB.loans.filter(l=>(l.status==='active'||l.status==='overdue')&&l.studentId===student.id).length;
   const maxForStudent=getStudentMaxBooks(student);
   if(al>=maxForStudent){showFB(`${student.first} כבר שאל/ה ${al} ספרים (מקסימום ${maxForStudent})`,'warning');return;}
-  const found=findCopy(document.getElementById('loan-b').value);if(!found){showFB('ברקוד לא נמצא','warning');return;}
+  const found=findCopy(bVal);if(!found){showFB('ברקוד לא נמצא: '+esc(bVal),'warning');return;}
   const{book,copy}=found;
   if(book.pendingApproval){showFB(`"${book.title}" ממתין לאישור מנהל/ת ועדיין לא ניתן להשאלה`,'warning');return;}
   if(book.noLoan||copy.noLoan){showFB(`עותק "${book.title}" מסומן כ"לא להשאלה"`,'warning');return;}
@@ -3573,10 +3596,16 @@ function doLoan(){
   DB.loans.push(loan);book.loanCount=(book.loanCount||0)+1;
   addAct(`${student.first} שאל/ה: "${book.title}"`,'#2980b9');
   showFB(`✅ "${book.title}" → ${student.first} ${student.last} | עד ${fmtDate(loan.dueDate)}`);
-  document.getElementById('loan-s').value='';document.getElementById('loan-b').value='';loanBookPreview('');
+  document.getElementById('loan-s').value='';
   saveDB();
 }
-function doReturn(){const found=findCopy(document.getElementById('loan-b').value);if(!found){showFB('ברקוד לא נמצא','warning');return;}const loan=DB.loans.find(l=>l.copyBc===found.copy.bc&&(l.status==='active'||l.status==='overdue'));if(!loan){showFB('ספר זה אינו מושאל','warning');return;}returnLoan(loan.id);document.getElementById('loan-b').value='';loanBookPreview('');}
+function doReturn(){
+  const bVal=document.getElementById('loan-b').value;
+  document.getElementById('loan-b').value='';loanBookPreview('');
+  const found=findCopy(bVal);if(!found){showFB('ברקוד לא נמצא: '+esc(bVal),'warning');return;}
+  const loan=DB.loans.find(l=>l.copyBc===found.copy.bc&&(l.status==='active'||l.status==='overdue'));if(!loan){showFB('ספר זה אינו מושאל','warning');return;}
+  returnLoan(loan.id);
+}
 function returnLoan(lid){
   const loan=DB.loans.find(x=>x.id===lid);if(!loan)return;
   const book=DB.books.find(x=>x.id===loan.bookId),student=DB.students.find(x=>x.id===loan.studentId);
