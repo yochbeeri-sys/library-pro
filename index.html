@@ -816,6 +816,7 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
               <th onclick="sortBooks('series')" style="cursor:pointer;user-select:none">סדרה <span id="sort-series"></span></th>
               <th onclick="sortBooks('group')" style="cursor:pointer;user-select:none">קבוצה <span id="sort-group"></span></th>
               <th onclick="sortBooks('location')" style="cursor:pointer;user-select:none">מיקום <span id="sort-location"></span></th>
+              <th onclick="sortBooks('added')" style="cursor:pointer;user-select:none" title="סדר קטלוג — מיון ברירת מחדל: החדש ביותר קודם">נוסף <span id="sort-added"></span></th>
               <th>עותקים</th><th>זמין</th><th></th>
             </tr></thead>
             <tbody id="books-tbody"></tbody>
@@ -2201,6 +2202,14 @@ function renderBooks(){
   // Sort
   if(bSortField){
     list.sort((a,b)=>{
+      if(bSortField==='added'){
+        // dateAdded only has day granularity, so break ties by id (which
+        // strictly reflects catalog insertion order) to get a real
+        // "most recently catalogued first" ordering within the same day.
+        const da=a.dateAdded||'',db=b.dateAdded||'';
+        if(da!==db)return da<db?-1*bSortDir:1*bSortDir;
+        return(a.id-b.id)*bSortDir;
+      }
       let va='',vb='';
       if(bSortField==='title'){va=a.title||'';vb=b.title||'';}
       else if(bSortField==='author'){va=a.author||'';vb=b.author||'';}
@@ -2226,6 +2235,7 @@ function renderBooks(){
       <td style="font-size:11px">${b.series?`<span style="color:var(--purple);font-weight:600">${esc(b.series)}</span>${b.seriesNum?`<span style="color:var(--muted);font-size:10px"> #${b.seriesNum}</span>`:''}`:''}</td>
       <td><span class="badge" style="background:${b.group?.lt};color:${b.group?.col}">${esc(b.group?.lbl)}</span></td>
       <td style="font-family:'Space Mono',monospace;font-size:10px">${esc(b.section)}-${esc(b.shelf)}</td>
+      <td style="font-size:10px;color:var(--muted);white-space:nowrap">${esc(b.dateAdded||'')}</td>
       <td style="text-align:center;font-size:11px">${b.copies.length}</td>
       <td><span class="badge ${av>0&&!b.noLoan?'badge-green':'badge-red'}">${b.noLoan?'\u{1F6AB}':av+'/'+b.copies.length}</span></td>
       <td><div class="td-act">
@@ -2240,7 +2250,7 @@ function renderBooks(){
         <button class="btn btn-xs btn-danger admin-only" onclick="delBook(${b.id})" title="מחק ספר (מנהל בלבד)">🗑</button>
       </div></td>
     </tr>`;
-  }).join('')||`<tr><td colspan="9"><div class="empty-state"><div class="eicon">📚</div><h3>אין ספרים</h3></div></td></tr>`;
+  }).join('')||`<tr><td colspan="10"><div class="empty-state"><div class="eicon">📚</div><h3>אין ספרים</h3></div></td></tr>`;
   updateBooksBulkBar();
 }
 function fBooks(f,el){bFilter=f;document.querySelectorAll('#view-books .filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderBooks();}
@@ -4470,8 +4480,13 @@ function mbForceAutoLocation(){
 // ════════════════════════════════════════
 let bSortField='',bSortDir=1;
 function sortBooks(field){
-  if(bSortField===field){bSortDir*=-1;}else{bSortField=field;bSortDir=1;}
-  ['title','author','series','group','location'].forEach(f=>{
+  if(bSortField===field){bSortDir*=-1;}
+  // "נוסף" (catalog order) defaults to newest-first on the initial click,
+  // unlike the alphabetical columns which default to ascending — that's
+  // what "view by catalog order, most recently catalogued first" means.
+  else if(field==='added'){bSortField=field;bSortDir=-1;}
+  else{bSortField=field;bSortDir=1;}
+  ['title','author','series','group','location','added'].forEach(f=>{
     const el=document.getElementById('sort-'+f);
     if(el)el.textContent=f===field?(bSortDir===1?'↑':'↓'):'';
   });
