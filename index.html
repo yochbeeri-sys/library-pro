@@ -750,6 +750,7 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
             <div style="margin-right:auto;display:flex;gap:6px">
               <button class="btn btn-sm btn-teal librarian-only" onclick="openBulkImport()">📥 ייבוא מאסיבי</button>
           <button class="btn btn-sm btn-ghost admin-only" onclick="openFindReplace()">🔄 חיפוש והחלפה</button>
+          <button class="btn btn-sm btn-ghost admin-only" id="pending-books-filter-btn" onclick="togglePendingOnlyFilter()" title="הצג רק ספרים שהוכנסו ע״י ספרנים וממתינים לאישור">⏳ ספרים לאישור (<span id="pending-books-filter-count">0</span>)</button>
               <button class="btn btn-sm btn-ghost" onclick="exportBooks()">⬇ ייצוא</button>
               <button class="btn btn-sm btn-primary admin-only librarian-only" onclick="openAddBookModal()">+ ספר</button>
             </div>
@@ -2092,6 +2093,7 @@ function renderDash(){
 //  BOOKS
 // ════════════════════════════════════════
 let bFilter='all',bText='';
+let bPendingOnly=false;
 let bookSelIds=new Set();
 function toggleBookSelect(id,checked){
   if(checked)bookSelIds.add(id);else bookSelIds.delete(id);
@@ -2181,7 +2183,10 @@ function renderBooks(){
   const yearQ=(document.getElementById('bsearch-year')?.value||'').trim();
   const fromQ=document.getElementById('bsearch-from')?.value||'';
   const toQ=document.getElementById('bsearch-to')?.value||'';
+  const pendCntEl=document.getElementById('pending-books-filter-count');
+  if(pendCntEl)pendCntEl.textContent=DB.books.filter(b=>b.pendingApproval).length;
   let list=DB.books.filter(b=>{
+    if(bPendingOnly&&!b.pendingApproval)return false;
     if(bFilter!=='all'&&b.group?.id!==bFilter)return false;
     if(q&&!((b.title||'').toLowerCase().includes(q)||(b.author||'').toLowerCase().includes(q)||(b.subject||'').toLowerCase().includes(q)||(b.tags||[]).some(t=>t.toLowerCase().includes(q))))return false;
     if(seriesQ&&!(b.series||'').toLowerCase().includes(seriesQ))return false;
@@ -2240,6 +2245,15 @@ function renderBooks(){
 }
 function fBooks(f,el){bFilter=f;document.querySelectorAll('#view-books .filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderBooks();}
 function fBooksText(v){bText=v;renderBooks();}
+function togglePendingOnlyFilter(){
+  bPendingOnly=!bPendingOnly;
+  const btn=document.getElementById('pending-books-filter-btn');
+  if(btn){
+    btn.style.background=bPendingOnly?'#d35400':'';
+    btn.style.color=bPendingOnly?'#fff':'';
+  }
+  renderBooks();
+}
 // ════════════════════════════════════════
 //  ADD BOOK MODAL
 // ════════════════════════════════════════
