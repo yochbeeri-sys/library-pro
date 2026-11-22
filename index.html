@@ -704,6 +704,14 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
 
       <!-- LOANS -->
       <div class="view" id="view-loans">
+        <div style="background:#1d8f5e;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;gap:10px;align-items:center">
+          <div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap">⚡ החזרה מהירה</div>
+          <input type="text" id="quick-return-bc" placeholder="סרקו ברקוד ספר כאן להחזרה מיידית..." autocomplete="off"
+            style="flex:1;border:none;border-radius:7px;padding:9px 12px;font-size:13px"
+            onkeydown="if(event.key==='Enter')quickReturnScan()">
+          <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;flex-shrink:0" onclick="openScan('quick-return-bc')">📷</button>
+          <div id="quick-return-fb" style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;min-width:160px;text-align:left"></div>
+        </div>
         <div class="quick-bar" style="flex-direction:column;gap:10px;align-items:stretch">
           <!-- שורה 1: שדות קלט -->
           <div style="display:flex;gap:11px;align-items:flex-end">
@@ -751,6 +759,7 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
               <button class="btn btn-sm btn-teal librarian-only" onclick="openBulkImport()">📥 ייבוא מאסיבי</button>
           <button class="btn btn-sm btn-ghost admin-only" onclick="openFindReplace()">🔄 חיפוש והחלפה</button>
           <button class="btn btn-sm btn-ghost admin-only" id="pending-books-filter-btn" onclick="togglePendingOnlyFilter()" title="הצג רק ספרים שהוכנסו ע״י ספרנים וממתינים לאישור">⏳ ספרים לאישור (<span id="pending-books-filter-count">0</span>)</button>
+          <button class="btn btn-sm btn-ghost admin-only" onclick="openBarcodeCollisionsModal()" title="בדוק אם שני ספרים שונים מקבלים בטעות אותו ברקוד">🔍 בדוק התנגשויות ברקוד</button>
               <button class="btn btn-sm btn-ghost" onclick="exportBooks()">⬇ ייצוא</button>
               <button class="btn btn-sm btn-primary admin-only librarian-only" onclick="openAddBookModal()">+ ספר</button>
             </div>
@@ -1316,6 +1325,22 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-copies')">סגור</button>
+    </div>
+  </div>
+</div>
+
+<!-- Barcode collisions check -->
+<div class="modal-overlay" id="modal-barcode-collisions">
+  <div class="modal" style="width:min(520px,96vw)">
+    <div class="modal-header"><h3>🔍 התנגשויות ברקוד</h3><button class="modal-close" onclick="closeModal('modal-barcode-collisions')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        בודק אם יותר מעותק אחד בקטלוג (אפילו בספרים שונים) משתמשים באותו ברקוד בדיוק — מצב כזה גורם לסריקה להתאים לספר הלא נכון.
+      </p>
+      <div id="barcode-collisions-list" style="max-height:340px;overflow-y:auto"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-barcode-collisions')">סגור</button>
     </div>
   </div>
 </div>
@@ -2439,14 +2464,20 @@ function saveBook(stayOpen=false){
   const noLoan=document.getElementById('mb-f-noloan')?.checked||false;
   if(editingBookId){
     const b=DB.books.find(x=>x.id===editingBookId);
+    const newCopyBarcodes=[];
+    for(let n=b.copies.length+1;n<=nc;n++)newCopyBarcodes.push(mbCopyBarcodeOverrides[n]||(bc+'-'+n));
+    const collisions=findBarcodeCollisions(newCopyBarcodes,editingBookId);
+    if(collisions.length&&!confirm('⚠️ התנגשות ברקודים!\n\n'+collisions.map(c=>`"${c.bc}" כבר קיים אצל הספר "${c.book.title}"`).join('\n')+'\n\nלשמור בכל זאת?'))return;
     b.title=title;b.author=document.getElementById('mb-f-author').value.trim();
     b.barcode=bc;b.section=section;b.shelf=shelf;b.group=grp;
     b.subject=subject;b.tags=tags;b.series=series;b.seriesNum=seriesNum;b.noLoan=noLoan;
     if(cover)b.cover=cover;
     while(b.copies.length<nc){const n=b.copies.length+1;b.copies.push({num:n,bc:mbCopyBarcodeOverrides[n]||(bc+'-'+n),status:'available'});}
   }else{
-    DB._ids.book++;
     const copies=Array.from({length:nc},(_,i)=>{const n=i+1;return{num:n,bc:mbCopyBarcodeOverrides[n]||(bc+'-'+n),status:'available'};});
+    const collisions=findBarcodeCollisions(copies.map(c=>c.bc),null);
+    if(collisions.length&&!confirm('⚠️ התנגשות ברקודים!\n\n'+collisions.map(c=>`"${c.bc}" כבר קיים אצל הספר "${c.book.title}"`).join('\n')+'\n\nלשמור בכל זאת?'))return;
+    DB._ids.book++;
     const pendingApproval=!isAdminVerified;
     DB.books.push({id:DB._ids.book,title,author:document.getElementById('mb-f-author').value.trim(),
       barcode:bc,section,shelf,group:grp,copies,loanCount:0,cover,
@@ -3419,6 +3450,42 @@ document.addEventListener('click',e=>{
   const wrap=document.getElementById('loan-s-picker'),input=document.getElementById('loan-s');
   if(wrap&&input&&wrap.classList.contains('open')&&!wrap.contains(e.target)&&e.target!==input)closeStudentPicker();
 });
+// Returns, for each barcode in `barcodes`, the first OTHER book (excluding
+// excludeBookId) that already has a copy with that exact barcode — used to
+// warn before saving rather than silently creating duplicate barcodes that
+// would make findCopy() ambiguous.
+function findBarcodeCollisions(barcodes,excludeBookId){
+  const collisions=[];
+  for(const bc of barcodes){
+    for(const bk of DB.books){
+      if(bk.id===excludeBookId)continue;
+      const copy=bk.copies.find(c=>c.bc===bc);
+      if(copy){collisions.push({bc,book:bk});break;}
+    }
+  }
+  return collisions;
+}
+// Full-catalog scan — groups every copy by its exact barcode and reports
+// any barcode shared by more than one copy (same book or different books).
+function findAllBarcodeCollisions(){
+  const byBc={};
+  DB.books.forEach(b=>{
+    b.copies.forEach(c=>{(byBc[c.bc]=byBc[c.bc]||[]).push({book:b,copy:c});});
+  });
+  return Object.entries(byBc).filter(([,entries])=>entries.length>1);
+}
+function openBarcodeCollisionsModal(){
+  const collisions=findAllBarcodeCollisions();
+  const el=document.getElementById('barcode-collisions-list');
+  el.innerHTML=collisions.length?collisions.map(([bc,entries])=>`
+    <div style="border:1.5px solid #f0c090;background:#fef0e4;border-radius:8px;padding:8px 10px;margin-bottom:8px">
+      <div style="font-weight:700;font-size:12px;font-family:'Space Mono',monospace;margin-bottom:4px">${esc(bc)}</div>
+      ${entries.map(e=>`<div style="font-size:11px;padding:2px 0">📕 ${esc(e.book.title)} (עותק #${e.copy.num})
+        <button class="btn btn-xs btn-ghost" style="margin-right:6px" onclick="closeModal('modal-barcode-collisions');openCopiesModal(${e.book.id})">📑 תקן עותקים</button>
+      </div>`).join('')}
+    </div>`).join(''):'<div style="color:var(--green);text-align:center;padding:16px;font-size:12px">✅ לא נמצאו התנגשויות ברקוד בקטלוג</div>';
+  openModal('modal-barcode-collisions');
+}
 function findCopy(bc){
   bc=bc.trim();
   if(!bc)return null;
@@ -3630,6 +3697,23 @@ function doReturn(){
   const found=findCopy(bVal);if(!found){showFB('ברקוד לא נמצא: '+esc(bVal),'warning');return;}
   const loan=DB.loans.find(l=>l.copyBc===found.copy.bc&&(l.status==='active'||l.status==='overdue'));if(!loan){showFB('ספר זה אינו מושאל','warning');return;}
   returnLoan(loan.id);
+}
+// Dedicated quick-return scan box: one scan = one return, no extra click.
+function quickReturnScan(){
+  const inp=document.getElementById('quick-return-bc');
+  const bVal=inp.value;
+  inp.value='';
+  const fb=document.getElementById('quick-return-fb');
+  const setFb=(msg,color)=>{if(fb){fb.textContent=msg;fb.style.color=color;}};
+  if(!bVal.trim()){inp.focus();return;}
+  const found=findCopy(bVal);
+  if(!found){setFb('❌ ברקוד לא נמצא: '+bVal,'#ffd0d0');inp.focus();return;}
+  const loan=DB.loans.find(l=>l.copyBc===found.copy.bc&&(l.status==='active'||l.status==='overdue'));
+  if(!loan){setFb(`"${found.book.title}" אינו מושאל כרגע`,'#ffe8a0');inp.focus();return;}
+  returnLoan(loan.id);
+  setFb(`✅ "${found.book.title}" הוחזר`,'#c9ffd8');
+  renderLoans();
+  inp.focus();
 }
 function returnLoan(lid){
   const loan=DB.loans.find(x=>x.id===lid);if(!loan)return;
@@ -5154,6 +5238,7 @@ function startScan(){
     const tgts={
       'loan-s':()=>document.getElementById('loan-s').value=code,
       'loan-b':()=>{document.getElementById('loan-b').value=code;loanBookPreview(code);},
+      'quick-return-bc':()=>{document.getElementById('quick-return-bc').value=code;quickReturnScan();},
       'lf-bc':()=>{document.getElementById('lf-bc').value=code;upLP();},
       'mb-isbn':()=>{document.getElementById('mb-isbn').value=code;setTimeout(searchISBN,200);},
       'mb-f-bc':()=>document.getElementById('mb-f-bc').value=code,
