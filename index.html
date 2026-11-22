@@ -3405,7 +3405,7 @@ function renderLoans(){
       <td style="font-family:'Space Mono',monospace;font-size:10px">${esc(l.copyBc)}</td>
       <td style="font-size:10px">${fmtDate(l.loanDate)}</td><td style="font-size:10px">${l.returnDate?fmtDate(l.returnDate):fmtDate(l.dueDate)}</td>
       <td>${badge}</td>
-      <td><div class="td-act">${l.status!=='returned'?`<button class="btn btn-xs btn-success" onclick="returnLoan(${l.id})">↩</button>`:''}${l.status==='active'?`<button class="btn btn-xs btn-ghost" onclick="extendLoan(${l.id})">+</button>`:''}</div></td>
+      <td><div class="td-act">${l.status!=='returned'?`<button class="btn btn-xs btn-success" onclick="returnLoan(${l.id})">↩</button>`:''}${l.status==='active'||l.status==='overdue'?`<button class="btn btn-xs btn-ghost" onclick="extendLoan(${l.id});renderLoans()">+</button>`:''}</div></td>
     </tr>`;
   }).join('')||`<tr><td colspan="7"><div class="empty-state"><div class="eicon">🔄</div><h3>אין נתונים</h3></div></td></tr>`;
 }
@@ -3749,7 +3749,20 @@ function returnLoan(lid){
   if(student)addAct(`${student.first} החזיר/ה: "${book?.title}"`,'#27ae60');
   saveDB();
 }
-function extendLoan(lid){const l=DB.loans.find(x=>x.id===lid);if(l){l.dueDate=addDays(l.dueDate,DB.settings.loanDays||14);showFB('✅ הוארך');saveDB();}}
+function extendLoan(lid){
+  const l=DB.loans.find(x=>x.id===lid);if(!l)return;
+  const wasOverdue=l.status==='overdue';
+  // Extend forward from today when the loan is overdue (or already due
+  // today/soon), so the new due date is never still in the past — not
+  // from the old due date, which for an overdue book is already behind.
+  const base=l.dueDate<todayStr()?todayStr():l.dueDate;
+  l.dueDate=addDays(base,DB.settings.loanDays||14);
+  if(wasOverdue)l.status='active';
+  const msg=wasOverdue?'✅ ההשאלה הוארכה ואינה יותר באיחור':'✅ הוארך';
+  showFB(msg);
+  showToast(msg);
+  saveDB();
+}
 function checkOverdue(){if(!DB)return;DB.loans.forEach(l=>{if(l.status==='active'&&l.dueDate<todayStr())l.status='overdue';});}
 // Check overdue status every 5 minutes
 setInterval(()=>{if(DB&&currentLibId){checkOverdue();updateSbStats();}},300000);
