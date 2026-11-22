@@ -1031,6 +1031,7 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
             <button class="btn btn-sm btn-ghost admin-only" onclick="exportBooksExcel()">📊 ייצוא ספרים לאקסל</button>
             <button class="btn btn-sm btn-ghost admin-only" onclick="exportStudentsExcel()">👥 ייצוא תלמידים לאקסל</button>
             <button class="btn btn-sm btn-ghost admin-only" onclick="exportLoansExcel()">🔄 ייצוא השאלות לאקסל</button>
+            <button class="btn btn-sm btn-ghost admin-only" onclick="exportSeriesExcel()" title="קובץ עם שורה אחת לכל סדרה — מתאים ליצירת מדבקות בכמות (Bulk Create) ב-Canva">🏷️ ייצוא סדרות למדבקות</button>
             <button class="btn btn-sm btn-ghost admin-only" onclick="backupToGoogleDrive()">☁️ גיבוי ל-Drive</button>
           </div>
         </div>
@@ -3125,6 +3126,28 @@ function exportLoansExcel(){
   dlExcel(rows,'השאלות_'+new Date().toLocaleDateString('he-IL').replace(/\//g,'-')+'.xlsx','loans');
 }
 
+// One row per series (not per book) — built for Canva's Bulk Create: a
+// single uniform sticker design per series, e.g. for shelf dividers.
+function exportSeriesExcel(){
+  if(!DB){alert('אין נתונים');return;}
+  const bySeries={};
+  DB.books.forEach(b=>{
+    const name=(b.series||'').trim();
+    if(!name)return;
+    (bySeries[name]=bySeries[name]||[]).push(b);
+  });
+  const seriesNames=Object.keys(bySeries).sort((a,b)=>a.localeCompare(b,'he'));
+  if(!seriesNames.length){alert('לא נמצאו ספרים המשויכים לסדרה');return;}
+  const rows=[['סדרה','מספר ספרים בסדרה','מחבר/ים','קבוצת גיל','כותרים בסדרה']];
+  seriesNames.forEach(name=>{
+    const books=bySeries[name].slice().sort((a,b)=>(a.seriesNum||0)-(b.seriesNum||0));
+    const authors=[...new Set(books.map(b=>(b.author||'').trim()).filter(Boolean))].join(', ');
+    const groups=[...new Set(books.map(b=>b.group?.lbl).filter(Boolean))].join(', ');
+    const titles=books.map(b=>b.title).join(', ');
+    rows.push([name,books.length,authors,groups,titles]);
+  });
+  dlExcel(rows,'סדרות_למדבקות_'+new Date().toLocaleDateString('he-IL').replace(/\//g,'-')+'.xlsx','series');
+}
 function dlExcel(rows,filename,sheetName){
   try{
     const ws=XLSX.utils.aoa_to_sheet(rows);
