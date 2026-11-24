@@ -846,6 +846,8 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
           <button class="btn btn-sm btn-ghost admin-only" onclick="openDuplicatesModal()" title="בדיקת תלמידים כפולים">🔍 בדוק כפילויות</button>
           <button class="btn btn-sm btn-ghost admin-only" onclick="openLibrarianPicker()" title="בחירת תלמידים לתפקיד ספרן/ית">📚 הגדר ספרנים מתלמידים</button>
           <input type="file" id="xl-import" accept=".xlsx,.xls,.csv" style="display:none" onchange="importStudentsExcel(event)">
+          <button class="btn btn-sm btn-ghost admin-only" onclick="document.getElementById('xl-import-emails').click()" title="קובץ עם שם + אימייל — מעדכן כרטיסי תלמידים קיימים, לא יוצר כפילויות">📧 ייבוא אימיילים</button>
+          <input type="file" id="xl-import-emails" accept=".xlsx,.xls,.csv" style="display:none" onchange="importEmailsExcel(event)">
           <button class="btn btn-sm btn-ghost admin-only" onclick="openPromoteModal()" title="העלאת שכבה לכל בית הספר">🎓 העלאת שכבה</button>
           <button class="btn btn-sm btn-ghost admin-only" onclick="openAddStudent('teacher')">+ מורה / צוות</button>
           <button class="btn btn-sm btn-primary admin-only" onclick="openAddStudent('student')">+ תלמיד</button>
@@ -2946,6 +2948,108 @@ function importStudentsExcel(event){
         ? `✅ יובאו ${added} תלמידים בהצלחה${skipped>0 ? `
 (${skipped} שורות דולגו — כפילויות / ריקות)` : ''}`
         : `לא נוספו תלמידים חדשים (${skipped} כפילויות / שורות ריקות)`;
+      alert(msg);
+    } catch(err){
+      alert('שגיאה בקריאת הקובץ: ' + err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── Import emails only: matches rows to EXISTING students by name and
+// fills in their email — never creates a new student record, so a file
+// of names+emails can't produce duplicates. ──
+function importEmailsExcel(event){
+  if(!isAdminVerified){alert('פעולה זו מיועדת למנהל בלבד');return;}
+  const file=event.target.files[0];
+  if(!file)return;
+  event.target.value='';
+
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+
+      const norm=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,'').replace(/['"]/g,'');
+      const COL_FIRST=['שםפרטי','first','firstname','שם_פרטי','פרטי'];
+      const COL_LAST =['שםמשפחה','last','lastname','שם_משפחה','משפחה'];
+      const COL_FULL =['שם','שםמלא','name','fullname','תלמיד'];
+      const COL_CLASS=['כיתה','class','grade','כתה'];
+      const COL_EMAIL=['אימייל','מייל','email','דואראלקטרוני','כתובתמייל'];
+
+      const rawRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(!rawRows.length){alert('הקובץ ריק או לא נקרא כהלכה');return;}
+      let headerRowIdx=-1;
+      for(let i=0;i<Math.min(30,rawRows.length);i++){
+        const cells=rawRows[i].map(norm);
+        const hasName=cells.some(c=>COL_FIRST.includes(c))||cells.some(c=>COL_FULL.includes(c));
+        const hasEmail=cells.some(c=>COL_EMAIL.includes(c));
+        if(hasName&&hasEmail){headerRowIdx=i;break;}
+      }
+      if(headerRowIdx===-1){
+        alert('לא נמצאו עמודות שם ואימייל.\nוודאי שהקובץ כולל עמודת "שם פרטי"+"שם משפחה" (או "שם מלא") ועמודת "אימייל".');
+        return;
+      }
+      const headerRow=rawRows[headerRowIdx];
+      const rows=rawRows.slice(headerRowIdx+1)
+        .map(r=>{const obj={};headerRow.forEach((h,idx)=>{obj[h]=r[idx]!==undefined?r[idx]:'';});return obj;})
+        .filter(r=>Object.values(r).some(v=>String(v).trim()!==''));
+      if(!rows.length){alert('לא נמצאו שורות נתונים מתחת לכותרות');return;}
+
+      const findCol=(keys,row)=>{
+        const rowKeys=Object.keys(row);
+        for(const rk of rowKeys){if(keys.includes(norm(rk)))return rk;}
+        return null;
+      };
+      const firstRow=rows[0];
+      const cFirst=findCol(COL_FIRST,firstRow);
+      const cLast =findCol(COL_LAST, firstRow);
+      const cFull =findCol(COL_FULL, firstRow);
+      const cClass=findCol(COL_CLASS,firstRow);
+      const cEmail=findCol(COL_EMAIL,firstRow);
+      if(!cEmail){alert('לא נמצאה עמודת אימייל בקובץ');return;}
+      if(!cFirst&&!cFull){alert('לא נמצאה עמודת שם בקובץ');return;}
+
+      // Name -> matching students (usually one; more than one means two
+      // students share the exact name, e.g. in different classes).
+      const byName={};
+      DB.students.forEach(s=>{
+        const key=normNameKey(s.first+' '+s.last);
+        (byName[key]=byName[key]||[]).push(s);
+      });
+
+      let updated=0,noMatch=0,ambiguous=0,badRows=0;
+      rows.forEach(row=>{
+        const email=String(row[cEmail]||'').trim();
+        if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){badRows++;return;}
+        const nameRaw=cFirst&&cLast
+          ?String(row[cFirst]||'').trim()+' '+String(row[cLast]||'').trim()
+          :String(row[cFull]||'').trim();
+        const key=normNameKey(nameRaw);
+        if(!key){badRows++;return;}
+        let candidates=byName[key]||[];
+        if(candidates.length>1&&cClass){
+          const cls=normalizeClass(String(row[cClass]||'').trim());
+          const narrowed=candidates.filter(s=>s.cls===cls);
+          if(narrowed.length)candidates=narrowed;
+        }
+        if(candidates.length===0){noMatch++;return;}
+        if(candidates.length>1){ambiguous++;return;}
+        candidates[0].email=email;
+        updated++;
+      });
+
+      if(updated>0){
+        addAct(`יובאו אימיילים ל-${updated} תלמידים`,'#1a7a6e');
+        saveDB();
+        if(currentView==='students')renderStudents();
+      }
+      let msg=`✅ עודכנו ${updated} כרטיסי תלמידים עם אימייל.\nלא נוצרו תלמידים חדשים — הקובץ רק עדכן תלמידים קיימים.`;
+      if(noMatch>0)msg+=`\n⚠️ ${noMatch} שורות: לא נמצא/ה תלמיד/ה בשם הזה בקטלוג — ייתכן הבדל באיות.`;
+      if(ambiguous>0)msg+=`\n⚠️ ${ambiguous} שורות: השם משויך ליותר מתלמיד/ה אחד — הוסיפי עמודת "כיתה" לקובץ כדי להבחין ביניהם.`;
+      if(badRows>0)msg+=`\n⚠️ ${badRows} שורות דולגו (אימייל חסר/לא תקין או שם ריק).`;
       alert(msg);
     } catch(err){
       alert('שגיאה בקריאת הקובץ: ' + err.message);
