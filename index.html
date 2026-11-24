@@ -1392,6 +1392,10 @@ body.is-admin input.admin-only,body.is-admin input.librarian-only,body.is-librar
       <label>טלפון (אופציונלי)</label>
       <input type="text" id="ms-phone" placeholder="050-0000000">
     </div>
+    <div class="field">
+      <label>אימייל (אופציונלי — לשליחת התראות על איחור בהחזרה)</label>
+      <input type="email" id="ms-email" placeholder="parent@example.com">
+    </div>
   </div>
   <div class="modal-footer"><button class="btn btn-ghost btn-sm" onclick="closeModal('modal-student')">ביטול</button><button class="btn btn-primary btn-sm" onclick="saveStudent()">שמור</button></div></div>
 </div>
@@ -2589,6 +2593,7 @@ function renderStudents(){
         <div style="width:28px;height:28px;border-radius:50%;background:${avatarBg};display:flex;align-items:center;justify-content:center;font-size:${isTeacher?'14px':'10px'};font-weight:700;color:#fff;flex-shrink:0">${avatar}</div>
         <div><div style="font-weight:700;font-size:12px">${esc(s.first+' '+s.last)}</div>
         ${s.phone?`<div style="font-size:10px;color:var(--muted)">${esc(s.phone)}</div>`:''}
+        ${s.email?`<div style="font-size:10px;color:var(--muted)">✉️ ${esc(s.email)}</div>`:''}
         </div></div></td>
       <td>${roleBadge}</td>
       <td style="font-family:'Space Mono',monospace;font-size:10px">${esc(s.card)}</td>
@@ -2796,7 +2801,7 @@ function msRoleChange(){
 }
 function openAddStudent(defaultRole='student'){
   editingStudentId=null;
-  ['ms-first','ms-last','ms-phone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['ms-first','ms-last','ms-phone','ms-email'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('ms-card').value='';
   document.getElementById('ms-helper').checked=false;
   document.getElementById('ms-title-h').textContent='👤 הוסף משאיל';
@@ -2822,6 +2827,7 @@ function editStudent(id){
   else{document.getElementById('ms-cls').value=s.cls||'כיתה א1';}
   document.getElementById('ms-helper').checked=!!s.isHelper;
   const phEl=document.getElementById('ms-phone');if(phEl)phEl.value=s.phone||'';
+  const emEl=document.getElementById('ms-email');if(emEl)emEl.value=s.email||'';
   openModal('modal-student');
 }
 function saveStudent(){
@@ -2833,6 +2839,8 @@ function saveStudent(){
   const cls=isTeacher?'צוות':document.getElementById('ms-cls').value;
   const roleText=isTeacher?(document.getElementById('ms-role-txt').value.trim()||'מורה'):'';
   const phone=(document.getElementById('ms-phone')?.value||'').trim();
+  const email=(document.getElementById('ms-email')?.value||'').trim();
+  if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){alert('כתובת אימייל לא תקינה');return;}
   // "עוזר/ת ספרייה" (כיתות ג-ד) is a loan-limit tier only — extended loan
   // permission with NO loan/return permission. It's a separate concept from
   // being a librarian (password login + loan/return/add-book permissions,
@@ -2842,10 +2850,11 @@ function saveStudent(){
     const s=DB.students.find(x=>x.id===editingStudentId);
     s.first=first;s.last=last;s.cls=cls;s.role=role;s.roleText=roleText;s.isHelper=isHelper;
     if(phone)s.phone=phone;
+    s.email=email||'';
   }else{
     DB._ids.student++;
     const prefix=isTeacher?'T':'S';
-    DB.students.push({id:DB._ids.student,first,last,cls,role,roleText,phone,isHelper,
+    DB.students.push({id:DB._ids.student,first,last,cls,role,roleText,phone,email,isHelper,
       card:prefix+DB._ids.student,debt:0});
     addAct(`${isTeacher?'מורה/צוות':'תלמיד'} חדש: ${first} ${last}`,isTeacher?'#27ae60':'#2980b9');
   }
@@ -2868,6 +2877,7 @@ function importStudentsExcel(event){
       const COL_LAST   = ['שםמשפחה','last','lastname','שם_משפחה','משפחה'];
       const COL_CLASS  = ['כיתה','class','grade','כתה'];
       const COL_CARD   = ['כרטיס','card','מספרכרטיס','id'];
+      const COL_EMAIL  = ['אימייל','מייל','email','דואראלקטרוני','כתובתמייל'];
 
       // Some school systems export a "report" with title/summary rows before
       // the real header (school name, "total students", a formula cell...) —
@@ -2903,6 +2913,7 @@ function importStudentsExcel(event){
       const cLast  = findCol(COL_LAST,  firstRow);
       const cClass = findCol(COL_CLASS, firstRow);
       const cCard  = findCol(COL_CARD,  firstRow);
+      const cEmail = findCol(COL_EMAIL, firstRow);
 
       let added=0, skipped=0;
       rows.forEach(row => {
@@ -2920,8 +2931,9 @@ function importStudentsExcel(event){
 
         DB._ids.student++;
         const card = cCard && row[cCard] ? String(row[cCard]).trim() : 'S'+DB._ids.student;
+        const email = cEmail && row[cEmail] ? String(row[cEmail]).trim() : '';
         DB.students.push({id:DB._ids.student, first, last,
-          cls: normalizeClass(cls) || 'כיתה א1', card, debt:0});
+          cls: normalizeClass(cls) || 'כיתה א1', card, email, debt:0});
         added++;
       });
 
@@ -3077,6 +3089,7 @@ function showStudentDetail(id){
     '<div style="text-align:center;padding:9px 5px;background:var(--surface2);border-radius:7px"><div style="font-size:10px;font-weight:900;color:var(--blue)">'+esc(topGroup)+'</div><div style="font-size:9px;color:var(--muted)">קטגוריה מועדפת</div></div>'+
     '</div>'+
     (s.phone?'<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+esc(s.phone)+'</div>':'')+
+    (s.email?'<div style="font-size:11px;color:var(--muted);margin-bottom:10px">✉️ '+esc(s.email)+'</div>':'')+
     '<div style="font-size:11px;font-weight:700;margin-bottom:7px">מושאל כרגע ('+active.length+')</div>'+
     (active.map(l=>{const b=DB.books.find(x=>x.id===l.bookId);return'<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:11px"><div><div style="font-weight:600">'+esc(b?.title||'?')+'</div><div style="font-size:9px;color:var(--muted)">'+esc(b?.author||'')+'</div></div><div style="display:flex;align-items:center;gap:6px"><span class="badge '+(l.status==='overdue'?'badge-red':'badge-blue')+'">'+(l.status==='overdue'?Math.abs(dLeft(l.dueDate))+' ימי איחור':dLeft(l.dueDate)+' ימים')+'</span><button class="btn btn-xs btn-success" onclick="returnLoan('+l.id+');showStudentDetail('+id+')">↩</button></div></div>';}).join('')||'<div style="color:var(--muted);font-size:11px;padding:7px 0">אין</div>')+
     '<div style="font-size:11px;font-weight:700;margin:12px 0 7px">היסטוריית קריאות מלאה ('+loans.length+')</div>'+
@@ -3105,11 +3118,11 @@ function exportBooksExcel(){
 
 function exportStudentsExcel(){
   if(!DB){alert('אין נתונים');return;}
-  const rows=[['שם פרטי','שם משפחה','כיתה','תפקיד','מספר כרטיס','טלפון','ספרים מושאלים','סה"כ השאלות']];
+  const rows=[['שם פרטי','שם משפחה','כיתה','תפקיד','מספר כרטיס','טלפון','אימייל','ספרים מושאלים','סה"כ השאלות']];
   DB.students.forEach(s=>{
     const al=DB.loans.filter(l=>l.studentId===s.id&&(l.status==='active'||l.status==='overdue')).length;
     const tl=DB.loans.filter(l=>l.studentId===s.id).length;
-    rows.push([s.first,s.last,s.cls||'',s.roleText||'תלמיד',s.card,s.phone||'',al,tl]);
+    rows.push([s.first,s.last,s.cls||'',s.roleText||'תלמיד',s.card,s.phone||'',s.email||'',al,tl]);
   });
   dlExcel(rows,'תלמידים_'+new Date().toLocaleDateString('he-IL').replace(/\//g,'-')+'.xlsx','students');
 }
@@ -3274,9 +3287,29 @@ function sendOverdueReminders(){
     'אנא דאגו להחזרת הספרים בהקדם.\n\nתודה,\nהספרייה'
   );
 
-  // Open email client
-  window.open('mailto:?subject='+subject+'&body='+body);
-  alert('נפתח לקוח מייל עם רשימת הספרים באיחור.\nניתן להוסיף כתובות מייל של הורים ידנית.');
+  // Fill BCC with every overdue student's saved email (BCC so recipients
+  // don't see each other's addresses) — falls back to an empty recipient
+  // list the admin fills in by hand when no emails are on file yet.
+  const emails=[...new Set(Object.keys(byStudent).map(sid=>DB.students.find(x=>x.id===parseInt(sid))?.email).filter(Boolean))];
+  const missing=Object.keys(byStudent).length-emails.length;
+  window.open('mailto:?bcc='+encodeURIComponent(emails.join(','))+'&subject='+subject+'&body='+body);
+  if(emails.length&&missing>0)alert(`נפתח לקוח מייל עם ${emails.length} כתובות ב-BCC.\n${missing} תלמיד/ה באיחור ללא אימייל שמור — יש להוסיף ידנית או להכניס להם אימייל בכרטיס התלמיד/ה.`);
+  else if(emails.length)alert(`נפתח לקוח מייל עם ${emails.length} כתובות ב-BCC.`);
+  else alert('לאף אחד מהתלמידים באיחור אין אימייל שמור.\nנפתח לקוח מייל עם הרשימה — ניתן להוסיף כתובות ידנית, או להכניס אימיילים בכרטיסי התלמידים לפעם הבאה.');
+}
+// Personalized reminder for a single student — all their overdue books.
+function emailOneStudentReminder(studentId){
+  const s=DB.students.find(x=>x.id===studentId);if(!s)return;
+  if(!s.email){alert(`ל-${s.first} ${s.last} אין אימייל שמור בכרטיס. ניתן להוסיף דרך עריכת התלמיד/ה.`);return;}
+  const loans=DB.loans.filter(l=>l.status==='overdue'&&l.studentId===studentId);
+  if(!loans.length)return;
+  const booksList=loans.map(l=>{
+    const b=DB.books.find(x=>x.id===l.bookId);
+    return `- ${b?.title||'?'} (${Math.abs(dLeft(l.dueDate))} ימי איחור)`;
+  }).join('\n');
+  const subject=encodeURIComponent('תזכורת: ספרים שלא הוחזרו לספריית '+(DB.settings?.school||'בית הספר'));
+  const body=encodeURIComponent(`שלום,\n\n${s.first} ${s.last} (${s.cls}) טרם החזיר/ה את הספרים הבאים שהמועד שלהם עבר:\n\n${booksList}\n\nאנא דאגו להחזרת הספרים בהקדם.\n\nתודה,\nהספרייה`);
+  window.open('mailto:'+encodeURIComponent(s.email)+'?subject='+subject+'&body='+body);
 }
 
 // ════════════════════════════════════════
@@ -4151,6 +4184,7 @@ function renderAlerts(){
       <div style="display:flex;flex-direction:column;gap:4px">
         <button class="btn btn-xs btn-success" onclick="returnLoan(${l.id});renderAlerts()">↩ החזרה</button>
         <button class="btn btn-xs btn-ghost" onclick="extendLoan(${l.id});renderAlerts()">+ארכה</button>
+        ${s?.email?`<button class="btn btn-xs btn-ghost" onclick="emailOneStudentReminder(${s.id})" title="${esc(s.email)}">✉️ תזכורת</button>`:''}
       </div>
     </div>`;
   }).join(''):`<div class="empty-state" style="padding:20px"><div class="eicon">✅</div><div>אין ספרים באיחור!</div></div>`;
